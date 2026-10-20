@@ -1,0 +1,46 @@
+name: Build GrainPrint
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os_name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            os_name: macOS
+            script: ./scripts/build_macos.sh
+          - os: windows-latest
+            os_name: Windows
+            script: powershell -ExecutionPolicy Bypass -File scripts/build_windows.ps1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.13"
+
+      - name: Build application
+        run: ${{ matrix.script }}
+
+      - name: Upload macOS artifact
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrainPrint-macOS
+          path: dist/GrainPrint.app
+
+      - name: Upload Windows artifact
+        if: runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: GrainPrint-Windows
+          path: dist/**
