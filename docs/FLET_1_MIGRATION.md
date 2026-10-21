@@ -58,13 +58,13 @@ Flet 1.0 中 `ElevatedButton` 已移除，替换为 `Button`。项目使用 `ft.
 
 ### 5. 打包存储目录
 
-Flet 0.86+ 的应用包目录只读。项目已改为：
+应用采用便携式数据目录：
 
-```python
-FLET_APP_STORAGE_DATA
-```
+- 开发模式：项目根目录
+- Windows：`GrainPrint.exe` 所在目录
+- macOS：`GrainPrint.app` 所在目录
 
-并将 DuckDB 数据库写入该目录。首次启动会从包内种子数据库复制一份。
+数据库写入 `data/grainprint.duckdb`。首次启动会从包内种子数据库复制一份。
 
 ## Web 兼容性
 

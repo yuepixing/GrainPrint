@@ -1,24 +1,31 @@
 from __future__ import annotations
 
-import os
 import shutil
 import sys
 from pathlib import Path
 
 
-def _storage_base() -> Path:
-    """Return Flet's writable application-storage directory.
+def _portable_base() -> Path:
+    """Return the directory that should hold the app-local data folder.
 
-    Flet 0.86+ sets FLET_APP_STORAGE_DATA to a writable, app-private directory
-    for built apps. In development, use the project's current working directory.
+    Development uses the repository root. Packaged apps use the directory
+    containing the executable (Windows/Linux) or the parent of the .app bundle
+    on macOS. This keeps GrainPrint portable and avoids OS-specific AppData
+    directories.
     """
-    configured = os.getenv("FLET_APP_STORAGE_DATA")
-    if configured:
-        return Path(configured)
-    return Path.cwd()
+    if getattr(sys, "frozen", False):
+        executable = Path(sys.executable).resolve()
+        if sys.platform == "darwin":
+            parts = executable.parts
+            if ".app" in parts:
+                app_index = len(parts) - 1 - parts[::-1].index(".app")
+                app_bundle = Path(*parts[: app_index + 1])
+                return app_bundle.parent
+        return executable.parent
+    return Path(__file__).resolve().parents[2]
 
 
-BASE_DIR = _storage_base()
+BASE_DIR = _portable_base()
 DATA_DIR = BASE_DIR / "data"
 EXPORT_DIR = BASE_DIR / "exports"
 DB_PATH = DATA_DIR / "grainprint.duckdb"
@@ -27,7 +34,7 @@ SEED_DB_PATH = Path(__file__).with_name("data") / "grainprint.duckdb"
 
 
 def ensure_database() -> None:
-    """Create the writable data directory and seed it on first launch."""
+    """Create the local data directory and seed it on first launch."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     if not DB_PATH.exists() and SEED_DB_PATH.exists():

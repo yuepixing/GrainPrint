@@ -14,7 +14,7 @@ GrainPrint/
 ├── src/assets/                      # Flet 静态资源（logo 等）
 ├── src/data/                         # 历史开发数据（不再作为运行时数据库）
 ├── src/grainprint/
-│   ├── config.py                     # Flet 存储目录、运行时数据库、种子数据库
+│   ├── config.py                     # 便携式数据目录、运行时数据库、种子数据库
 │   ├── data/grainprint.duckdb        # 打包用种子数据库（首次启动复制）
 │   ├── core/
 │   │   ├── database.py               # SQLAlchemy engine/session、初始化与重置
@@ -43,9 +43,8 @@ GrainPrint/
 ## 运行时数据
 
 - 开发模式：`<项目>/data/grainprint.duckdb`
-- Flet 构建模式：`FLET_APP_STORAGE_DATA/data/grainprint.duckdb`
-  - macOS：`~/Library/Application Support/cn.digitalsalt.grainprint/data`
-  - Windows：`%APPDATA%\\Digitalsalt\\GrainPrint\\data`
+- Windows 打包模式：`GrainPrint.exe` 所在目录下的 `data/grainprint.duckdb`
+- macOS 打包模式：`GrainPrint.app` 所在目录下的 `data/grainprint.duckdb`
 - 首次启动时若运行时数据库不存在，会复制 `src/grainprint/data/grainprint.duckdb`。
 
 ## 常用命令
