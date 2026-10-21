@@ -76,9 +76,12 @@ class CropView(ft.Row):
         )
         self.detail_panel = ft.Container(
             expand=True, padding=20,
-            content=ft.Column([
-                ft.Text("选择一个项目查看详情", size=16, color=ft.Colors.GREY_500),
-            ]),
+            content=ft.Column(
+                [ft.Text("选择一个项目查看详情", size=16,
+                         color=ft.Colors.GREY_500)],
+                scroll=ft.ScrollMode.AUTO,
+                expand=True,
+            ),
         )
 
         self.controls = [self._build_sidebar(), self.detail_panel]
@@ -268,12 +271,25 @@ class CropView(ft.Row):
         ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
     def _build_marker_item(self, marker, entity_type, entity_id) -> ft.Container:
-        info_parts = []
-        if marker.source:              info_parts.append(f"来源: {marker.source}")
-        if marker.screening_method:    info_parts.append(f"筛选: {marker.screening_method}")
-        if marker.metabolic_pathway:   info_parts.append(f"途径: {marker.metabolic_pathway}")
-        if marker.notes:               info_parts.append(f"备注: {marker.notes}")
-        info_text = " • ".join(info_parts) or "暂无详细信息"
+        # 需求 6：关联字段各占一行，字号与标题一致。
+        info_lines: list[ft.Control] = []
+        for label, value in [
+            ("来源", marker.source),
+            ("筛选", marker.screening_method),
+            ("途径", marker.metabolic_pathway),
+            ("文献", marker.literature_source),
+            ("备注", marker.notes),
+            ("备注2", marker.notes2),
+        ]:
+            if value:
+                info_lines.append(ft.Text(
+                    f"{label}: {value}", size=14, color=ft.Colors.GREY_700,
+                    expand=True,
+                ))
+        if not info_lines:
+            info_lines.append(ft.Text(
+                "暂无详细信息", size=14, color=ft.Colors.GREY_500,
+            ))
 
         title_row = ft.Row([
             ft.Text(marker.name, weight=ft.FontWeight.W_500),
@@ -284,11 +300,8 @@ class CropView(ft.Row):
 
         lines: list[ft.Control] = [
             title_row,
-            ft.Text(info_text, size=12, color=ft.Colors.GREY_600,
-                    max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
+            *info_lines,
         ]
-        if marker.literature_source:
-            lines.append(self._build_literature(marker.literature_source))
 
         actions: ft.Control
         if marker.level:

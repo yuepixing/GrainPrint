@@ -107,7 +107,8 @@ class MarkerService:
                 screening_method=data.screening_method,
                 metabolic_pathway=data.metabolic_pathway,
                 literature_source=data.literature_source,
-                notes=data.notes)
+                notes=data.notes,
+                notes2=data.notes2)
 
     @staticmethod
     def update_association(association_id: int, data: MarkerAssociationUpdate) -> bool:

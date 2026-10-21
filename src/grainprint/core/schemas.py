@@ -23,6 +23,7 @@ class MarkerInfo(BaseModel):
     metabolic_pathway: str | None = None
     literature_source: str | None = None
     notes: str | None = None
+    notes2: str | None = None
 
 
 class EntityDetail(BaseModel):

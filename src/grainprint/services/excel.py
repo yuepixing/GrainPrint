@@ -54,12 +54,12 @@ class ExcelService:
     def _export_associations(self, wb, repo):
         ws = wb.create_sheet('标志物关联')
         ws.append(['ID', '标志物ID', '粮食ID', '品类ID', '品种ID',
-                   '来源', '筛选方法', '代谢途径', '文献来源', '备注'])
+                   '来源', '筛选方法', '代谢途径', '文献来源', '备注1', '备注2'])
         with get_session() as session:
             for a in session.query(MarkerAssociation).all():
                 ws.append([a.id, a.marker_id, a.crop_id, a.subspecies_id, a.variety_id,
                            a.source, a.screening_method, a.metabolic_pathway,
-                           a.literature_source, a.notes])
+                           a.literature_source, a.notes, a.notes2])
 
     # ========== 导入 ==========
 
@@ -171,9 +171,9 @@ class ExcelService:
     def _import_associations(self, ws, repo, id_map):
         count = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
-            row = (row + (None,) * 10)[:10]
+            row = (row + (None,) * 11)[:11]
             _, old_marker_id, old_crop_id, old_sub_id, old_var_id, \
-                source, screening_method, metabolic_pathway, literature_source, notes = row
+                source, screening_method, metabolic_pathway, literature_source, notes, notes2 = row
 
             marker_id = id_map['markers'].get(old_marker_id)
             if marker_id is None:
@@ -200,7 +200,8 @@ class ExcelService:
                     marker_id=marker_id, entity_type=entity_type, entity_id=entity_id,
                     source=source, screening_method=screening_method,
                     metabolic_pathway=metabolic_pathway,
-                    literature_source=literature_source, notes=notes)
+                    literature_source=literature_source, notes=notes,
+                    notes2=notes2)
                 count += 1
         return count
 

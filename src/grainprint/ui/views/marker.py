@@ -22,6 +22,7 @@ class MarkerView(ft.Column):
         self._detail_id: Optional[int] = None
         self._detail_dialog: Optional[ft.AlertDialog] = None
         self._pending_scroll_id: Optional[int] = None
+        self._filter: Optional[str] = None
 
         self._grid_inner = ft.Row(
             wrap=True, spacing=16, run_spacing=16,
@@ -76,11 +77,17 @@ class MarkerView(ft.Column):
         self._render_all()
 
     def search(self, keyword: str):
+        self._filter = None
         if not keyword:
             self.refresh()
             return
         results = EntityService.search(keyword, EntityType.MARKER)
         self._render([r.id for r in results])
+
+    def filter_by_association(self, state: Optional[str]):
+        """state: all / linked / unlinked，点统计卡片时过滤列表。"""
+        self._filter = state
+        self._render_all()
 
     def _switch_view(self, mode: str):
         if mode == self.view_mode:
@@ -100,6 +107,7 @@ class MarkerView(ft.Column):
         stats = EntityService.get_stats()
         total = stats['total']['markers']
         unlinked = stats['markers']['markers_without_association']
+        linked = total - unlinked
 
         toggle = ft.Container(
             content=ft.Row([self.grid_btn, self.list_btn], spacing=2),
@@ -114,16 +122,45 @@ class MarkerView(ft.Column):
             ),
             expand=True, height=60, alignment=ft.Alignment.CENTER,
         )
+        stats_cards = [
+            StatCard(
+                "标志物总数", total, icon=ft.Icons.CATEGORY,
+                color=ft.Colors.GREEN_700,
+            ),
+            StatCard(
+                "已关联", linked, icon=ft.Icons.LINK,
+                color=ft.Colors.BLUE_700,
+            ),
+            StatCard(
+                "未关联", unlinked, icon=ft.Icons.LINK_OFF,
+                color=ft.Colors.ORANGE_700,
+            ),
+        ]
+        for card, state in zip(stats_cards, ["all", "linked", "unlinked"]):
+            card.data = state
+            card.ink = True
+            card.on_click = lambda e, s=state: self.filter_by_association(s)
+
         self.stats_row.controls = [
-            StatCard("标志物总数", total),
-            StatCard("已关联", total - unlinked),
-            StatCard("未关联", unlinked),
+            *stats_cards,
             toggle,
             new_btn,
         ]
 
     def _render_all(self):
-        ids = [m.id for m in EntityService.get_children(EntityType.MARKER)]
+        markers = EntityService.get_children(EntityType.MARKER)
+        if self._filter in ("linked", "unlinked"):
+            linked_ids = {
+                m.id for m in markers
+                if EntityService.get_detail(EntityType.MARKER, m.id).children
+            }
+            ids = [
+                m.id for m in markers
+                if (self._filter == "linked" and m.id in linked_ids)
+                or (self._filter == "unlinked" and m.id not in linked_ids)
+            ]
+        else:
+            ids = [m.id for m in markers]
         self._render(ids)
 
     def _render(self, marker_ids: list[int]):
@@ -160,16 +197,20 @@ class MarkerView(ft.Column):
     def _render_list(self, rows):
         self.list.controls.clear()
         self.list.controls.append(self._list_header())
-        for mid, marker, detail in rows:
-            self.list.controls.append(self._list_row(mid, marker, detail))
+        for idx, (mid, marker, detail) in enumerate(rows, start=1):
+            self.list.controls.append(self._list_row(idx, mid, marker, detail))
 
     def _list_header(self) -> ft.Container:
+        # 需求 5：左边增加“序号”；需求 7：备注分列。
         return ft.Container(
             content=ft.Row([
-                ft.Text("名称",   weight=ft.FontWeight.W_500, expand=2),
+                ft.Text("序号", weight=ft.FontWeight.W_500, expand=1),
+                ft.Text("名称", weight=ft.FontWeight.W_500, expand=2),
                 ft.Text("英文名", weight=ft.FontWeight.W_500, expand=2),
                 ft.Text("结构式", weight=ft.FontWeight.W_500, expand=3),
-                ft.Text("关联",   weight=ft.FontWeight.W_500, expand=1),
+                ft.Text("备注1", weight=ft.FontWeight.W_500, expand=2),
+                ft.Text("备注2", weight=ft.FontWeight.W_500, expand=2),
+                ft.Text("关联", weight=ft.FontWeight.W_500, expand=1),
                 ft.Container(width=90),
             ]),
             padding=pad_sym(horizontal=12, vertical=8),
@@ -177,18 +218,42 @@ class MarkerView(ft.Column):
             width=float("inf"),
         )
 
-    def _list_row(self, mid: int, marker, detail) -> ft.Container:
+    def _list_row(self, seq: int, mid: int, marker, detail) -> ft.Container:
         is_selected = mid == self.selected_id
         formula = (marker.structure_formula if marker and marker.structure_formula
                    else "—")
         n = len(detail.children)
+        # 需求 7：标志物列表增加 备注1 / 备注2 列。
+        note1 = note2 = "—"
+        full = EntityService.get_detail(EntityType.MARKER, mid)
+        notes = []
+        notes2 = []
+        for child in full.children:
+            text = child.association_info or ""
+            if "备注:" in text:
+                part = text.split("备注:", 1)[-1].split(" • ")[0].strip()
+                notes.append(part)
+            if "备注2:" in text:
+                part = text.split("备注2:", 1)[-1].split(" • ")[0].strip()
+                notes2.append(part)
+        if notes:
+            note1 = notes[0]
+        if notes2:
+            note2 = notes2[0]
 
         row = ft.Container(
             content=ft.Row([
+                ft.Text(str(seq), size=13, color=ft.Colors.GREY_600, expand=1),
                 ft.Text(detail.name, size=14, weight=ft.FontWeight.W_500, expand=2),
                 ft.Text(detail.name_en or "—", size=13, color=ft.Colors.GREY_700, expand=2),
                 ft.Text(formula, size=13,
                         style=ft.TextStyle(font_family="Consolas"), expand=3),
+                ft.Text(note1, size=12, expand=2, max_lines=2,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        color=ft.Colors.GREY_700),
+                ft.Text(note2, size=12, expand=2, max_lines=2,
+                        overflow=ft.TextOverflow.ELLIPSIS,
+                        color=ft.Colors.GREY_700),
                 ft.Text(
                     f"{n} 个" if n else "未关联", size=13, expand=1,
                     color=ft.Colors.GREEN_700 if n else ft.Colors.GREY_500,
@@ -352,12 +417,25 @@ class MarkerView(ft.Column):
 
     def _assoc_item(self, marker_id: int, child) -> ft.Container:
         info = getattr(child, 'association_info', None) or "暂无详细信息"
+        # 需求 6：来源、筛选、途径、备注各占一行，字号与关联实体标题一致。
+        info_keys = ['来源', '筛选', '途径', '文献', '备注2', '备注']
+        info_lines: list[ft.Control] = [ft.Text(' > '.join(child.path),
+                                               size=14,
+                                               weight=ft.FontWeight.W_500)]
+        for key in info_keys:
+            if f"{key}:" in info:
+                segment = info.split(f"{key}:", 1)[1]
+                if " • " in segment:
+                    segment = segment.split(" • ")[0]
+                info_lines.append(ft.Text(
+                    f"{key}: {segment.strip()}", size=14,
+                    color=ft.Colors.GREY_700, expand=True,
+                ))
         return ft.Container(
             content=ft.Row([
                 ft.Column([
-                    ft.Text(' > '.join(child.path)),
-                    ft.Text(info, size=12, color=ft.Colors.GREY_600),
-                ], spacing=4, expand=True),
+                    *info_lines,
+                ], spacing=6, expand=True),
                 ft.Row([
                     ft.IconButton(
                         ft.Icons.EDIT_OUTLINED, icon_size=18,

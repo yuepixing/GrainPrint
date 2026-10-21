@@ -115,9 +115,15 @@ class EntityDetailCard(ft.Container):
         header = ft.Row(header_controls,
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
+        if children:
+            inner = ft.Column(
+                children, spacing=0, height=360,
+                scroll=ft.ScrollMode.AUTO,
+            )
+        else:
+            inner = ft.Text(f"暂无{title}", color=ft.Colors.GREY_500, size=14)
         body = ft.Container(
-            content=ft.Column(children, spacing=0) if children else ft.Text(
-                f"暂无{title}", color=ft.Colors.GREY_500, size=14),
+            content=inner,
             padding=pad_only(top=10),
         )
 

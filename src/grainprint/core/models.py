@@ -97,6 +97,7 @@ class MarkerAssociation(Base):
     metabolic_pathway: Mapped[str | None] = mapped_column(Text)
     literature_source: Mapped[str | None] = mapped_column(Text)
     notes: Mapped[str | None] = mapped_column(Text)
+    notes2: Mapped[str | None] = mapped_column(Text)
 
     marker: Mapped["Marker"] = relationship(
         back_populates="associations",

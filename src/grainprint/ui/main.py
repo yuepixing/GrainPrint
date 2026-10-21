@@ -57,6 +57,11 @@ class WelcomePage:
                         content=ft.Column(
                             [
                                 self.search_field,
+                                ft.IconButton(
+                                    icon=ft.Icons.SEARCH,
+                                    tooltip="搜索",
+                                    on_click=self.on_search,
+                                ),
                                 ft.Container(height=25),
                                 ft.Row(
                                     [
@@ -253,6 +258,11 @@ class GrainPrintApp:
                     ], spacing=30),
                     ft.Row([
                         self.search_field,
+                        ft.IconButton(
+                            icon=ft.Icons.SEARCH,
+                            tooltip="搜索",
+                            on_click=self.on_search,
+                        ),
                         ft.OutlinedButton(content="导入", icon=ft.Icons.UPLOAD, on_click=self.import_data),
                         ft.OutlinedButton(content="导出", icon=ft.Icons.DOWNLOAD, on_click=self.export_data),
                     ], spacing=10),
@@ -346,6 +356,10 @@ class GrainPrintApp:
             self.crop_view.search(keyword)
         elif self.main_view == "marker":
             self.marker_view.search(keyword)
+        elif self.main_view == "stats" and keyword:
+            self.switch_view("marker")
+            self.marker_view.search(keyword)
+        self.page.update()
 
     async def import_data(self, e):
         result = await self.file_picker.pick_files(

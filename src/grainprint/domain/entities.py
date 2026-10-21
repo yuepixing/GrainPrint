@@ -83,6 +83,7 @@ class MarkerAssociationCreate(BaseModel):
     metabolic_pathway: Optional[str] = Field(None, description="代谢途径")
     literature_source: Optional[str] = Field(None, description="文献来源")
     notes: Optional[str] = Field(None, description="备注")
+    notes2: Optional[str] = Field(None, description="备注2")
 
 class MarkerAssociationUpdate(BaseModel):
     source: Optional[str] = Field(None, max_length=200, description="来源")
@@ -90,6 +91,7 @@ class MarkerAssociationUpdate(BaseModel):
     metabolic_pathway: Optional[str] = Field(None, description="代谢途径")
     literature_source: Optional[str] = Field(None, description="文献来源")
     notes: Optional[str] = Field(None, description="备注")
+    notes2: Optional[str] = Field(None, description="备注2")
 
 class DeleteConfirmation(BaseModel):
     entity_type: EntityType

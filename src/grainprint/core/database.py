@@ -11,6 +11,23 @@ engine = create_engine(f"duckdb:///{DB_PATH}")
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
 
+def _migrate_schema():
+    """轻量迁移：为旧库补充 notes2 列。"""
+    if not DB_PATH.exists():
+        return
+    try:
+        with engine.begin() as conn:
+            conn.exec_driver_sql(
+                "ALTER TABLE marker_associations ADD COLUMN IF NOT EXISTS notes2 TEXT"
+            )
+    except Exception:
+        # 新建库初始化时由 SQLAlchemy 建表，不需要 ALTER。
+        pass
+
+
+_migrate_schema()
+
+
 @contextmanager
 def get_session():
     session = SessionLocal()

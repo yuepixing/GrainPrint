@@ -110,6 +110,8 @@ class Repository:
                                 f"文献: {assoc.literature_source}")
                         if assoc.notes:
                             association_info.append(f"备注: {assoc.notes}")
+                        if assoc.notes2:
+                            association_info.append(f"备注2: {assoc.notes2}")
 
                         result = SearchResult(id=e.id,
                                               name=e.name,
@@ -145,6 +147,7 @@ class Repository:
         info.metabolic_pathway = assoc.metabolic_pathway
         info.literature_source = assoc.literature_source
         info.notes = assoc.notes
+        info.notes2 = assoc.notes2
         return info
 
     def _get_entity_path(self, entity, entity_type: str) -> list[str]:
@@ -286,23 +289,60 @@ class Repository:
         return False
 
     def get_children(self, entity_type: str, parent_id: int = None) -> list:
+        # 用户要求的粮食/品类默认顺序：保持演示数据稳定，避免按拼音或名称字母变化。
+        crop_order = ["稻谷", "大豆", "小麦", "玉米"]
+        subspecies_order = {
+            "小麦": ["白小麦", "红小麦", "混合小麦"],
+            "玉米": ["黄玉米", "白玉米", "混合玉米"],
+            "稻谷": ["粳稻", "籼稻", "杂交稻"],
+        }
+
         match entity_type:
             case 'crop':
-                return self.session.query(Crop).order_by(Crop.name).all()
+                return self._ordered_entities(
+                    self.session.query(Crop), crop_order, fallback_key='name')
             case 'subspecies':
                 query = self.session.query(Subspecies)
                 if parent_id:
                     query = query.filter_by(crop_id=parent_id)
-                return query.order_by(Subspecies.name).all()
+                crops = {
+                    c.id: c
+                    for c in self.session.query(Crop).all()
+                }
+                parent_crop = crops.get(parent_id) if parent_id else None
+                order = subspecies_order.get(parent_crop.name) if parent_crop else None
+                return self._ordered_entities(
+                    query, order, fallback_key='name')
             case 'variety':
                 query = self.session.query(Variety)
                 if parent_id:
                     query = query.filter_by(subspecies_id=parent_id)
-                return query.order_by(Variety.name).all()
+                return query.order_by(Variety.name, Variety.id).all()
             case 'marker':
-                return self.session.query(Marker).order_by(Marker.name).all()
+                return self.session.query(Marker).order_by(Marker.name, Marker.id).all()
             case _:
                 return []
+
+    def _ordered_entities(self, query, order: list[str] | None,
+                          fallback_key: str = 'name'):
+        """按用户指定顺序排序，未列出的名称排在最后并按名称升序。"""
+        rows = query.all()
+        if not order:
+            return sorted(rows, key=lambda e: [
+                (getattr(e, fallback_key) or "").lower(),
+                e.id or 0,
+            ])
+
+        order_index = {name.strip(): i for i, name in enumerate(order)}
+
+        def sort_key(entity):
+            name = (getattr(entity, 'name') or "").strip()
+            idx = order_index.get(name)
+            if idx is not None:
+                return (0, idx, name)
+            return (1, 0, name)
+
+        return sorted(rows, key=sort_key)
 
     def get_marker_associations_by_entity(
             self, entity_type: str, entity_id: int) -> list[MarkerAssociation]:

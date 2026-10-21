@@ -16,7 +16,8 @@ INFO_FIELDS = [
     ('screening_method',  "筛选方法", False),
     ('metabolic_pathway', "代谢途径", True),
     ('literature_source', "文献来源", True),
-    ('notes',             "备注",     True),
+    ('notes',             "备注1",    True),
+    ('notes2',            "备注2",    True),
 ]
 
 
@@ -58,6 +59,7 @@ class AssociationDialog:
             'metabolic_pathway': association.metabolic_pathway or '',
             'literature_source': association.literature_source or '',
             'notes':             association.notes or '',
+            'notes2':            association.notes2 or '',
         }
         dlg._show("编辑关联")
 
