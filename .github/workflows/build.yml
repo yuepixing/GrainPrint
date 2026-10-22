@@ -76,18 +76,23 @@ jobs:
         shell: bash
         run: |
           cd release
-          find macos -maxdepth 5 -name '*.app' -type d
+          find macos -maxdepth 6 \( -name '*.app' -o -name Info.plist \) | head -50
           find windows -maxdepth 3 -type f | head -20
           python3 - <<'PY'
           from pathlib import Path
           import zipfile
 
+          mac_app = None
           mac_apps = list(Path('macos').rglob('*.app'))
-          if not mac_apps:
-              raise SystemExit('macOS GrainPrint.app not found')
-          mac_app = mac_apps[0]
-          if not mac_app.is_dir():
-              raise SystemExit(f'{mac_app} is not a directory')
+          if mac_apps:
+              mac_app = mac_apps[0]
+          else:
+              plists = list(Path('macos').rglob('Info.plist'))
+              if plists:
+                  parent = plists[0].parent
+                  mac_app = parent.parent
+          if not mac_app or not mac_app.is_dir():
+              raise SystemExit('macOS application bundle not found')
 
           windows_exes = list(Path('windows').rglob('GrainPrint.exe'))
           if not windows_exes:
