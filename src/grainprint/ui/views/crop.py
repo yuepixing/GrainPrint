@@ -36,7 +36,8 @@ class TreeNode(ft.Container):
                  count: int = 0, level: int = 0,
                  is_expanded: bool = False, is_selected: bool = False,
                  on_click: Optional[callable] = None,
-                 on_toggle: Optional[callable] = None):
+                 on_toggle: Optional[callable] = None,
+                 trailing: Optional[ft.Control] = None):
         indent = level * 20
         icon = ft.Icons.ARROW_DROP_DOWN if is_expanded else ft.Icons.ARROW_RIGHT
         if entity_type == EntityType.VARIETY:
@@ -48,6 +49,8 @@ class TreeNode(ft.Container):
         row_items.append(ft.Text(name, size=14 - level, weight=ft.FontWeight.W_500))
         if count > 0:
             row_items.append(ft.Text(f"({count})", size=11, color=ft.Colors.GREY_600))
+        if trailing:
+            row_items.append(trailing)
 
         super().__init__(
             content=ft.Row(row_items, spacing=4),
@@ -71,8 +74,13 @@ class CropView(ft.Row):
         self.selected_type: Optional[EntityType] = None
         self.expanded: Set[str] = set()
 
-        self.tree = ft.Column(
-            scroll=ft.ScrollMode.AUTO, expand=True, spacing=0, width=float("inf"),
+        self.tree = ft.ReorderableListView(
+            controls=[],
+            show_default_drag_handles=False,
+            spacing=0,
+            expand=True,
+            width=float("inf"),
+            on_reorder=self._on_reorder,
         )
         self.detail_panel = ft.Container(
             expand=True, padding=20,
@@ -176,6 +184,31 @@ class CropView(ft.Row):
             self._append_crop(crop)
         self._update_page()
 
+    def _drag_handle(self) -> ft.Control:
+        return ft.ReorderableDragHandle(
+            content=ft.Icon(
+                ft.Icons.DRAG_INDICATOR, size=18,
+                color=ft.Colors.GREY_500,
+            ),
+            tooltip="拖动调整顺序",
+        )
+
+    def _on_reorder(self, e):
+        ordered: dict[tuple[str, Optional[int]], list[int]] = {}
+        for row in self.tree.controls:
+            key = getattr(row, 'data', None)
+            if not key or len(key) != 3:
+                continue
+            entity_type, entity_id, parent_id = key
+            gkey = (entity_type, parent_id)
+            ordered.setdefault(gkey, []).append(entity_id)
+
+        for (entity_type, parent_id), ids in ordered.items():
+            EntityService.reorder(
+                EntityType(entity_type), ids, parent_id=parent_id,
+            )
+        self._update_page()
+
     def _append_crop(self, crop):
         key = f"crop_{crop.id}"
         expanded = key in self.expanded
@@ -187,7 +220,9 @@ class CropView(ft.Row):
             is_selected=(self.selected_id == crop.id
                          and self.selected_type == EntityType.CROP),
             on_click=self._select_from_tree, on_toggle=self._toggle_expand,
+            trailing=self._drag_handle(),
         ))
+        self.tree.controls[-1].data = ('crop', crop.id, None)
 
         if expanded:
             for sub in subs:
@@ -204,7 +239,9 @@ class CropView(ft.Row):
             is_selected=(self.selected_id == sub.id
                          and self.selected_type == EntityType.SUBSPECIES),
             on_click=self._select_from_tree, on_toggle=self._toggle_expand,
+            trailing=self._drag_handle(),
         ))
+        self.tree.controls[-1].data = ('subspecies', sub.id, sub.crop_id)
 
         if expanded:
             for var in varieties:

@@ -86,6 +86,13 @@ class EntityService:
             return repo.get_children(entity_type.value, parent_id)
 
     @staticmethod
+    def reorder(entity_type: EntityType, ordered_ids: List[int],
+                parent_id: Optional[int] = None) -> bool:
+        with get_session() as session:
+            repo = Repository(session)
+            return repo.reorder(entity_type.value, ordered_ids, parent_id)
+
+    @staticmethod
     def get_stats() -> Dict[str, Any]:
         with get_session() as session:
             repo = Repository(session)

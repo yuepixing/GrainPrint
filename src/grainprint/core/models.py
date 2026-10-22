@@ -21,6 +21,7 @@ class Base(DeclarativeBase):
 class Crop(Base):
     __tablename__ = "crops"
 
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     name_en: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
@@ -34,6 +35,7 @@ class Crop(Base):
 class Subspecies(Base):
     __tablename__ = "subspecies"
 
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, index=True)
     crop_id: Mapped[int] = mapped_column(ForeignKey("crops.id"), index=True)
     name: Mapped[str] = mapped_column(String(100), index=True)
     name_en: Mapped[str | None] = mapped_column(String(200))

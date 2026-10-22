@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from grainprint.core.models import Crop, Subspecies, Variety, Marker, MarkerAssociation
 from grainprint.core.schemas import SearchResult, MarkerInfo, EntityDetail
 
@@ -164,11 +164,35 @@ class Repository:
 
     def create(self, entity_type: str, **data) -> int:
         if entity_class := self.entity_classes.get(entity_type):
+            if entity_type in ('crop', 'subspecies') and 'sort_order' not in data:
+                max_order = self.session.query(func.max(
+                    entity_class.sort_order
+                )).scalar() or 0
+                data['sort_order'] = max_order + 1
             entity = entity_class(**data)
             self.session.add(entity)
             self.session.flush()
             return entity.id
         raise ValueError(f"Unknown entity type: {entity_type}")
+
+    def reorder(self, entity_type: str, ordered_ids: list[int],
+                parent_id: int | None = None) -> bool:
+        """按拖动后的顺序保存粮食/品类排序。"""
+        model = self.entity_classes.get(entity_type)
+        if model is None or entity_type not in ('crop', 'subspecies'):
+            return False
+
+        query = self.session.query(model)
+        if entity_type == 'subspecies' and parent_id:
+            query = query.filter_by(crop_id=parent_id)
+        entities = {e.id: e for e in query.all()}
+
+        for index, entity_id in enumerate(ordered_ids):
+            entity = entities.get(entity_id)
+            if entity is not None:
+                entity.sort_order = index + 1
+        self.session.flush()
+        return True
 
     def create_marker_association(self, marker_id: int, entity_type: str,
                                   entity_id: int, **kwargs) -> int:
@@ -289,30 +313,16 @@ class Repository:
         return False
 
     def get_children(self, entity_type: str, parent_id: int = None) -> list:
-        # 用户要求的粮食/品类默认顺序：保持演示数据稳定，避免按拼音或名称字母变化。
-        crop_order = ["稻谷", "大豆", "小麦", "玉米"]
-        subspecies_order = {
-            "小麦": ["白小麦", "红小麦", "混合小麦"],
-            "玉米": ["黄玉米", "白玉米", "混合玉米"],
-            "稻谷": ["粳稻", "籼稻", "杂交稻"],
-        }
-
         match entity_type:
             case 'crop':
-                return self._ordered_entities(
-                    self.session.query(Crop), crop_order, fallback_key='name')
+                return self.session.query(Crop).order_by(
+                    Crop.sort_order, Crop.id).all()
             case 'subspecies':
                 query = self.session.query(Subspecies)
                 if parent_id:
                     query = query.filter_by(crop_id=parent_id)
-                crops = {
-                    c.id: c
-                    for c in self.session.query(Crop).all()
-                }
-                parent_crop = crops.get(parent_id) if parent_id else None
-                order = subspecies_order.get(parent_crop.name) if parent_crop else None
-                return self._ordered_entities(
-                    query, order, fallback_key='name')
+                return query.order_by(
+                    Subspecies.sort_order, Subspecies.id).all()
             case 'variety':
                 query = self.session.query(Variety)
                 if parent_id:
@@ -322,27 +332,6 @@ class Repository:
                 return self.session.query(Marker).order_by(Marker.name, Marker.id).all()
             case _:
                 return []
-
-    def _ordered_entities(self, query, order: list[str] | None,
-                          fallback_key: str = 'name'):
-        """按用户指定顺序排序，未列出的名称排在最后并按名称升序。"""
-        rows = query.all()
-        if not order:
-            return sorted(rows, key=lambda e: [
-                (getattr(e, fallback_key) or "").lower(),
-                e.id or 0,
-            ])
-
-        order_index = {name.strip(): i for i, name in enumerate(order)}
-
-        def sort_key(entity):
-            name = (getattr(entity, 'name') or "").strip()
-            idx = order_index.get(name)
-            if idx is not None:
-                return (0, idx, name)
-            return (1, 0, name)
-
-        return sorted(rows, key=sort_key)
 
     def get_marker_associations_by_entity(
             self, entity_type: str, entity_id: int) -> list[MarkerAssociation]:
