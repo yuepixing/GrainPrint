@@ -76,20 +76,35 @@ jobs:
         shell: bash
         run: |
           cd release
+          find macos -maxdepth 5 -name '*.app' -type d
+          find windows -maxdepth 3 -type f | head -20
           python3 - <<'PY'
           from pathlib import Path
           import zipfile
+
+          mac_apps = list(Path('macos').rglob('*.app'))
+          if not mac_apps:
+              raise SystemExit('macOS GrainPrint.app not found')
+          mac_app = mac_apps[0]
+          if not mac_app.is_dir():
+              raise SystemExit(f'{mac_app} is not a directory')
+
+          windows_exes = list(Path('windows').rglob('GrainPrint.exe'))
+          if not windows_exes:
+              raise SystemExit('GrainPrint.exe not found')
+
           def add_dir(z, path, arc_prefix):
               for p in sorted(path.rglob('*')):
                   if p.is_file():
                       z.write(p, str(Path(arc_prefix) / p.relative_to(path)))
 
           with zipfile.ZipFile('GrainPrint-macOS.zip', 'w', zipfile.ZIP_DEFLATED) as z:
-              add_dir(z, Path('macos/GrainPrint.app'), 'GrainPrint.app')
+              add_dir(z, mac_app, 'GrainPrint.app')
 
           with zipfile.ZipFile('GrainPrint-Windows.zip', 'w', zipfile.ZIP_DEFLATED) as z:
-              z.write(Path('windows/GrainPrint.exe').resolve(), 'GrainPrint.exe')
+              z.write(windows_exes[0].resolve(), 'GrainPrint.exe')
           PY
+          ls -lh GrainPrint-macOS.zip GrainPrint-Windows.zip
           sha256sum GrainPrint-macOS.zip GrainPrint-Windows.zip
 
       - name: Publish release
