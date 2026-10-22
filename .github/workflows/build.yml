@@ -2,6 +2,11 @@ name: Build GrainPrint
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, e.g. v0.3.0"
+        required: false
+        default: "v0.3.0"
   push:
     tags:
       - "v*"
@@ -44,3 +49,54 @@ jobs:
         with:
           name: GrainPrint-Windows
           path: dist/**
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GrainPrint-macOS
+          path: release/macos
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: GrainPrint-Windows
+          path: release/windows
+
+      - name: Create release archives
+        shell: bash
+        run: |
+          cd release
+          python3 - <<'PY'
+          from pathlib import Path
+          import zipfile
+          def add_dir(z, path, arc_prefix):
+              for p in sorted(path.rglob('*')):
+                  if p.is_file():
+                      z.write(p, str(Path(arc_prefix) / p.relative_to(path)))
+
+          with zipfile.ZipFile('GrainPrint-macOS.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              add_dir(z, Path('macos/GrainPrint.app'), 'GrainPrint.app')
+
+          with zipfile.ZipFile('GrainPrint-Windows.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+              z.write(Path('windows/GrainPrint.exe').resolve(), 'GrainPrint.exe')
+          PY
+          sha256sum GrainPrint-macOS.zip GrainPrint-Windows.zip
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: GrainPrint ${{ inputs.tag || github.ref_name }}
+          files: |
+            release/GrainPrint-macOS.zip
+            release/GrainPrint-Windows.zip
