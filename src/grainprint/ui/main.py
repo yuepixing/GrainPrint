@@ -5,6 +5,8 @@ from datetime import datetime
 
 from grainprint.services.excel import ExcelService
 from grainprint.ui.components.styles import bottom_border
+from grainprint.domain.entities import EntityType
+from grainprint.domain.services import EntityService
 
 
 class WelcomePage:
@@ -294,8 +296,7 @@ class GrainPrintApp:
 
         if "search_keyword" in kwargs:
             self.search_field.value = kwargs["search_keyword"]
-            self.switch_view("crop")
-            self.crop_view.search(kwargs["search_keyword"])
+            self._search_and_navigate(kwargs["search_keyword"])
         elif kwargs.get("action") == "import":
             self.switch_view("crop")
             self.page.run_task(self.import_data, None)
@@ -352,13 +353,49 @@ class GrainPrintApp:
 
     def on_search(self, e):
         keyword = self.search_field.value
-        if self.main_view == "crop":
-            self.crop_view.search(keyword)
-        elif self.main_view == "marker":
-            self.marker_view.search(keyword)
-        elif self.main_view == "stats" and keyword:
-            self.switch_view("marker")
-            self.marker_view.search(keyword)
+        if keyword:
+            self._search_and_navigate(keyword)
+
+    def _search_and_navigate(self, keyword: str):
+        results = EntityService.search(keyword)
+        if not results:
+            self._show_dialog("未找到", f"没有找到与“{keyword}”相关的数据")
+            return
+
+        exact = [r for r in results if r.name == keyword]
+        candidates = exact or results
+        if len(candidates) == 1:
+            self._go_search_result(candidates[0])
+            return
+
+        dialog_items = []
+        for r in candidates[:20]:
+            label = f"[{r.type}] {' > '.join(r.path)}"
+
+            def pick(e, result=r):
+                self.page.pop_dialog()
+                self._go_search_result(result)
+
+            dialog_items.append(ft.TextButton(
+                content=label,
+                on_click=pick,
+            ))
+        dialog = ft.AlertDialog(
+            title=ft.Text("请选择搜索结果"),
+            content=ft.Column(dialog_items, tight=True, scroll=ft.ScrollMode.AUTO),
+            actions=[ft.TextButton(
+                content="取消",
+                on_click=lambda e: self.page.pop_dialog(),
+            )],
+        )
+        self.page.show_dialog(dialog)
+
+    def _go_search_result(self, result):
+        if result.type == 'marker':
+            self.switch_view("marker", marker_id=result.id)
+        elif result.type in ('crop', 'subspecies', 'variety'):
+            self.switch_view("crop")
+            self.crop_view.select_entity(result.type, result.id)
         self.page.update()
 
     async def import_data(self, e):

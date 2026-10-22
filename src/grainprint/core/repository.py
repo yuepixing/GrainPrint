@@ -61,6 +61,16 @@ class Repository:
                 markers = [
                     self._marker_info_full(a, "") for a in entity.markers
                 ]
+                for sub in entity.subspecies:
+                    markers.extend([
+                        self._marker_info_full(
+                            a, f"品类：{sub.name}") for a in sub.markers
+                    ])
+                    for var in sub.varieties:
+                        markers.extend([
+                            self._marker_info_full(
+                                a, f"品种：{var.name}") for a in var.markers
+                        ])
                 children = [
                     SearchResult(id=s.id,
                                  name=s.name,
