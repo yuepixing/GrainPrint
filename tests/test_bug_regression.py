@@ -1,6 +1,7 @@
-from grainprint.core.database import get_session, reset_db
+from grainprint.core.database import get_session, reset_db, _backup_on_startup
 from grainprint.config import DB_PATH
 from pathlib import Path
+import duckdb
 from grainprint.core.repository import Repository
 
 
@@ -124,3 +125,23 @@ def test_reset_db_should_backup_instead_of_silently_deleting_data():
     backups = sorted(Path(DB_PATH.parent).glob("grainprint.duckdb.bak*"))
     assert backups, "reset_db 必须保留旧数据备份，不能直接清空"
     assert DB_PATH.stat().st_size > 0
+
+
+def test_startup_backup_keeps_recoverable_copy():
+    from grainprint.config import DATA_DIR
+    latest = DATA_DIR / "backup" / "grainprint_latest.duckdb"
+    if latest.exists():
+        latest.unlink()
+    reset_db()
+    with get_session() as s:
+        repo = Repository(s)
+        _setup_base(repo)
+
+    backup = _backup_on_startup()
+    assert backup is not None and backup.exists()
+    assert backup.stat().st_size > 0
+    con = duckdb.connect(str(backup), read_only=True)
+    try:
+        assert con.execute("select count(*) from crops").fetchone()[0] >= 1
+    finally:
+        con.close()

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from datetime import datetime
 import shutil
 
-from grainprint.config import DB_PATH, ensure_database
+from grainprint.config import DATA_DIR, DB_PATH, ensure_database
 
 
 ensure_database()
@@ -34,6 +34,35 @@ def _migrate_schema():
 
 
 _migrate_schema()
+
+
+def _backup_on_startup():
+    """每次启动保留 latest，并在每天首次启动时保留日期版备份。"""
+    if not DB_PATH.exists():
+        return None
+
+    # 先关闭连接池，确保复制的 DuckDB 文件不依赖未 checkpoint 的 WAL。
+    if "engine" in globals():
+        engine.dispose()
+
+    backup_dir = DATA_DIR / "backup"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    date_name = datetime.now().strftime("%Y%m%d")
+    backup_path = backup_dir / f"grainprint_{date_name}.duckdb"
+    latest_path = backup_dir / "grainprint_latest.duckdb"
+
+    if backup_path.exists():
+        pass
+    else:
+        import shutil
+        shutil.copy2(DB_PATH, backup_path)
+
+    import shutil
+    shutil.copy2(DB_PATH, latest_path)
+    return latest_path
+
+
+_backup_on_startup()
 
 
 @contextmanager
