@@ -37,6 +37,11 @@ def ensure_database() -> None:
     """Create the local data directory and seed it on first launch."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    latest_backup = DATA_DIR / "backup" / "grainprint_latest.duckdb"
+    if not DB_PATH.exists():
+        if latest_backup.exists():
+            shutil.copy2(latest_backup, DB_PATH)
+            return
     if not DB_PATH.exists() and SEED_DB_PATH.exists():
         shutil.copy2(SEED_DB_PATH, DB_PATH)
 
