@@ -23,6 +23,7 @@ class MarkerView(ft.Column):
         self._detail_dialog: Optional[ft.AlertDialog] = None
         self._pending_scroll_id: Optional[int] = None
         self._filter: Optional[str] = None
+        self._detail_cache: dict[int, Any] = {}
 
         self._grid_inner = ft.Row(
             wrap=True, spacing=16, run_spacing=16,
@@ -78,6 +79,7 @@ class MarkerView(ft.Column):
 
     def search(self, keyword: str):
         self._filter = None
+        self._detail_cache.clear()
         if not keyword:
             self.refresh()
             return
@@ -87,6 +89,7 @@ class MarkerView(ft.Column):
     def filter_by_association(self, state: Optional[str]):
         """state: all / linked / unlinked，点统计卡片时过滤列表。"""
         self._filter = state
+        self._detail_cache.clear()
         self._render_all()
 
     def _switch_view(self, mode: str):
@@ -152,7 +155,7 @@ class MarkerView(ft.Column):
         if self._filter in ("linked", "unlinked"):
             linked_ids = {
                 m.id for m in markers
-                if EntityService.get_detail(EntityType.MARKER, m.id).children
+                if self._get_detail_cached(m.id).children
             }
             ids = [
                 m.id for m in markers
@@ -166,7 +169,7 @@ class MarkerView(ft.Column):
     def _render(self, marker_ids: list[int]):
         markers = {m.id: m for m in EntityService.get_children(EntityType.MARKER)}
         rows = [
-            (mid, markers.get(mid), EntityService.get_detail(EntityType.MARKER, mid))
+            (mid, markers.get(mid), self._get_detail_cached(mid))
             for mid in marker_ids
         ]
 
@@ -177,6 +180,13 @@ class MarkerView(ft.Column):
 
         self._page.update()
         self._try_scroll(marker_ids)
+
+    def _get_detail_cached(self, marker_id: int):
+        detail = self._detail_cache.get(marker_id)
+        if detail is None:
+            detail = EntityService.get_detail(EntityType.MARKER, marker_id)
+            self._detail_cache[marker_id] = detail
+        return detail
 
     def _render_grid(self, rows):
         self._grid_inner.controls.clear()
@@ -225,7 +235,7 @@ class MarkerView(ft.Column):
         n = len(detail.children)
         # 需求 7：标志物列表增加 备注1 / 备注2 列。
         note1 = note2 = "—"
-        full = EntityService.get_detail(EntityType.MARKER, mid)
+        full = self._get_detail_cached(mid)
         notes = []
         notes2 = []
         for child in full.children:
@@ -310,6 +320,7 @@ class MarkerView(ft.Column):
     def _create_marker(self):
         def on_submit(data: MarkerCreate):
             EntityService.create(EntityType.MARKER, data)
+            self._detail_cache.clear()
             self.refresh()
 
         FormDialog(page=self._page, title="新建标志物",
@@ -322,6 +333,7 @@ class MarkerView(ft.Column):
 
         def on_submit(data: MarkerUpdate):
             EntityService.update(EntityType.MARKER, marker_id, data)
+            self._detail_cache.pop(marker_id, None)
             self.refresh()
 
         FormDialog(
@@ -340,6 +352,7 @@ class MarkerView(ft.Column):
 
         def on_confirm():
             EntityService.delete(EntityType.MARKER, marker_id)
+            self._detail_cache.pop(marker_id, None)
             if self.selected_id == marker_id:
                 self.selected_id = None
             self.refresh()
@@ -464,7 +477,7 @@ class MarkerView(ft.Column):
         AssociationDialog.open_for_create(
             page=self._page,
             marker_id=self._detail_id,
-            on_done=self._render_detail,
+            on_done=lambda: self._invalidate_detail(self._detail_id),
         )
 
     def _edit_association(self, entity_type: str, entity_id: int):
@@ -475,7 +488,7 @@ class MarkerView(ft.Column):
             page=self._page,
             association=association,
             entity=(entity_type, entity_id),
-            on_done=self._render_detail,
+            on_done=lambda: self._invalidate_detail(self._detail_id),
         )
 
     def _delete_association(self, marker_id: int, entity_type: str, entity_id: int):
@@ -485,7 +498,7 @@ class MarkerView(ft.Column):
 
         def on_confirm():
             EntityService.delete(EntityType.ASSOCIATION, association.id)
-            self._render_detail()
+            self._invalidate_detail(marker_id)
 
         ConfirmDialog(
             page=self._page,
@@ -495,6 +508,10 @@ class MarkerView(ft.Column):
             ),
             on_confirm=on_confirm,
         ).show()
+
+    def _invalidate_detail(self, marker_id: int):
+        self._detail_cache.pop(marker_id, None)
+        self._render_detail()
 
     def _navigate_entity(self, entity_type: str, entity_id: int):
         if self._detail_dialog:

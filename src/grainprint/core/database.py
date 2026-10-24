@@ -1,6 +1,8 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from contextlib import contextmanager
+from datetime import datetime
+import shutil
 
 from grainprint.config import DB_PATH, ensure_database
 
@@ -58,12 +60,21 @@ def reset_db():
     engine.dispose()
 
     if DB_PATH.exists():
-        DB_PATH.unlink()
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+        backup = DB_PATH.with_name(f"{DB_PATH.name}.bak_{stamp}")
+        shutil.copy2(DB_PATH, backup)
+
+        # 删除时仍避免直接 unlink 数据文件；rename 为 damaged 保留现场。
+        damaged = DB_PATH.with_name(f"{DB_PATH.name}.damaged_{stamp}")
+        DB_PATH.rename(damaged)
 
     engine = create_engine(f"duckdb:///{DB_PATH}")
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
     init_db()
+
+    # 返回备份路径，方便 UI 提示。
+    return {"backup": backup if 'backup' in locals() else None}
 
 
 if not DB_PATH.exists():

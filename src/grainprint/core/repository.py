@@ -245,34 +245,34 @@ class Repository:
                             self.session.query(MarkerAssociation).filter(
                                 MarkerAssociation.variety_id.in_(variety_ids)
                             ).delete(synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         if variety_ids:
                             self.session.query(Variety).filter(
                                 Variety.id.in_(variety_ids)).delete(
                                     synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         if subspecies_ids:
                             self.session.query(MarkerAssociation).filter(
                                 MarkerAssociation.subspecies_id.in_(
                                     subspecies_ids)).delete(
                                         synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         if subspecies_ids:
                             self.session.query(Subspecies).filter(
                                 Subspecies.id.in_(subspecies_ids)).delete(
                                     synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(MarkerAssociation).filter_by(
                             crop_id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(Crop).filter_by(
                             id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                     case 'subspecies':
                         variety_ids = [v.id for v in entity.varieties]
@@ -281,43 +281,43 @@ class Repository:
                             self.session.query(MarkerAssociation).filter(
                                 MarkerAssociation.variety_id.in_(variety_ids)
                             ).delete(synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         if variety_ids:
                             self.session.query(Variety).filter(
                                 Variety.id.in_(variety_ids)).delete(
                                     synchronize_session=False)
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(MarkerAssociation).filter_by(
                             subspecies_id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(Subspecies).filter_by(
                             id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                     case 'variety':
                         self.session.query(MarkerAssociation).filter_by(
                             variety_id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(Variety).filter_by(
                             id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                     case 'marker':
                         self.session.query(MarkerAssociation).filter_by(
                             marker_id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                         self.session.query(Marker).filter_by(
                             id=entity_id).delete()
-                        self.session.commit()
+                        self.session.flush()
 
                     case 'association':
                         self.session.delete(entity)
-                        self.session.commit()
+                        self.session.flush()
 
                 return True
         return False
