@@ -392,7 +392,8 @@ class GrainPrintApp:
 
     def _go_search_result(self, result):
         if result.type == 'marker':
-            self.switch_view("marker", marker_id=result.id)
+            self.switch_view("marker")
+            self.marker_view.filter_by_id(result.id)
         elif result.type in ('crop', 'subspecies', 'variety'):
             self.switch_view("crop")
             self.crop_view.select_entity(result.type, result.id)

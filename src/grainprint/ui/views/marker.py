@@ -77,6 +77,13 @@ class MarkerView(ft.Column):
         self._pending_scroll_id = marker_id
         self._render_all()
 
+    def filter_by_id(self, marker_id: int):
+        """搜索跳转时只展示该标志物，便于确认已定位到目标。"""
+        self._filter = None
+        self.selected_id = marker_id
+        self._pending_scroll_id = marker_id
+        self._render([marker_id])
+
     def search(self, keyword: str):
         self._filter = None
         self._detail_cache.clear()
