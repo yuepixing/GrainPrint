@@ -14,7 +14,7 @@ args=(
   -y src/main.py
   -n GrainPrint
   --product-name GrainPrint
-  --product-version 0.2.0
+  --product-version 0.5.0
   --bundle-id cn.digitalsalt.grainprint
   -i src/assets/logo.icns
   --add-data "src/assets:assets"
@@ -30,7 +30,7 @@ fi
 .venv/bin/flet pack "${args[@]}"
 
 # PyInstaller does not currently map Flet's --product-version to macOS plist.
-plutil -replace CFBundleShortVersionString -string 0.2.0 dist/GrainPrint.app/Contents/Info.plist
+plutil -replace CFBundleShortVersionString -string 0.5.0 dist/GrainPrint.app/Contents/Info.plist
 plutil -replace CFBundleVersion -string 1 dist/GrainPrint.app/Contents/Info.plist
 codesign --force --deep --sign "${MACOS_SIGNING_IDENTITY:--}" dist/GrainPrint.app
 

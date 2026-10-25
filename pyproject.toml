@@ -1,6 +1,6 @@
 [project]
 name = "GrainPrint"
-version = "0.2.0"
+version = "0.5.0"
 description = "粮食品质劣变标志物数据库，基于 Flet 1.0 的跨平台谷物管理系统"
 authors = [
     {name = "zihanjia", email = "zihan.jia@digitalsalt.cn"},
