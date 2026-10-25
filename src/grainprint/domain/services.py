@@ -86,6 +86,11 @@ class EntityService:
             return repo.get_children(entity_type.value, parent_id)
 
     @staticmethod
+    def get_marker_summaries() -> List[Dict[str, Any]]:
+        with get_session() as session:
+            return Repository(session).get_marker_summaries()
+
+    @staticmethod
     def reorder(entity_type: EntityType, ordered_ids: List[int],
                 parent_id: Optional[int] = None) -> bool:
         with get_session() as session:
@@ -107,15 +112,23 @@ class MarkerService:
         with get_session() as session:
             repo = Repository(session)
             return repo.create_marker_association(
-                marker_id=data.marker_id,
-                entity_type=data.entity_type.value,
-                entity_id=data.entity_id,
-                source=data.source,
-                screening_method=data.screening_method,
-                metabolic_pathway=data.metabolic_pathway,
-                literature_source=data.literature_source,
-                notes=data.notes,
-                notes2=data.notes2)
+                marker_id=data.marker_id, entity_type=data.entity_type.value,
+                entity_id=data.entity_id, **data.model_dump(
+                    exclude={'marker_id', 'entity_type', 'entity_id'}, exclude_none=True))
+
+    @staticmethod
+    def create_associations(marker_id: int, targets: list[tuple[EntityType, int]],
+                            info: dict) -> list[int]:
+        with get_session() as session:
+            return Repository(session).create_marker_associations(
+                marker_id, [(kind.value, entity_id) for kind, entity_id in targets], **info)
+
+    @staticmethod
+    def replace_association(association_id: int, data: MarkerAssociationCreate) -> int:
+        with get_session() as session:
+            return Repository(session).replace_marker_association(
+                association_id, data.marker_id, data.entity_type.value, data.entity_id,
+                **data.model_dump(exclude={'marker_id', 'entity_type', 'entity_id'}, exclude_none=True))
 
     @staticmethod
     def update_association(association_id: int, data: MarkerAssociationUpdate) -> bool:

@@ -263,16 +263,24 @@ class CropView(ft.Row):
         detail = EntityService.get_detail(entity_type, entity_id)
 
         header = self._build_header(detail, entity_type, entity_id)
+        marker_items = [m for m in detail.markers if m.material_type != "特征物质"]
+        feature_items = [m for m in detail.markers if m.material_type == "特征物质"]
         marker_card = EntityDetailCard(
-            title="关联标志物",
-            count=len(detail.markers),
-            children=[self._build_marker_item(m, entity_type, entity_id) for m in detail.markers],
-            add_label="关联",
-            on_add=lambda e: self._add_association(entity_type, entity_id),
+            title="关联标志物", count=len(marker_items),
+            children=[self._build_marker_item(m, entity_type, entity_id) for m in marker_items],
+            add_label="关联", on_add=lambda e: self._add_association(entity_type, entity_id),
+        )
+        feature_card = EntityDetailCard(
+            title="关联特征物质", count=len(feature_items),
+            children=[self._build_marker_item(m, entity_type, entity_id) for m in feature_items],
         )
 
+        material_cards = ft.Row([
+            ft.Container(marker_card, expand=1),
+            ft.Container(feature_card, expand=1),
+        ], spacing=16, expand=True)
         if entity_type == EntityType.VARIETY:
-            body = marker_card
+            body = material_cards
         else:
             child_items = [self._build_child_item(c) for c in detail.children]
             children_card = EntityDetailCard(
@@ -282,9 +290,9 @@ class CropView(ft.Row):
                 add_label="新建",
                 on_add=lambda e: self._create_child(entity_type, entity_id),
             )
-            body = ft.Row([
-                ft.Container(marker_card, expand=7),
-                ft.Container(children_card, expand=3),
+            body = ft.Column([
+                material_cards,
+                children_card,
             ], spacing=20, expand=True)
 
         self.detail_panel.content = ft.Column(
@@ -330,6 +338,7 @@ class CropView(ft.Row):
 
         title_row = ft.Row([
             ft.Text(marker.name, weight=ft.FontWeight.W_500),
+            ft.Text(marker.material_type or "未分类", size=12, color=ft.Colors.TEAL_700),
             ft.Text(f"({marker.formula})", size=13,
                     style=ft.TextStyle(font_family="Consolas"))
             if marker.formula else ft.Container(),

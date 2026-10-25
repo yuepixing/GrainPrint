@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_
+from grainprint.domain.errors import UserOperationError
 from grainprint.core.models import Crop, Subspecies, Variety, Marker, MarkerAssociation
 from grainprint.core.schemas import SearchResult, MarkerInfo, EntityDetail
 
@@ -156,8 +157,13 @@ class Repository:
         info.screening_method = assoc.screening_method
         info.metabolic_pathway = assoc.metabolic_pathway
         info.literature_source = assoc.literature_source
-        info.notes = assoc.notes
-        info.notes2 = assoc.notes2
+        # Material classification/source belongs to the material, not a
+        # particular crop association.  Existing databases fall back to old
+        # association notes until users classify the material itself.
+        info.notes = assoc.marker.notes or assoc.notes
+        info.notes2 = assoc.marker.notes2 or assoc.notes2
+        info.material_type = self._material_type(info.notes)
+        info.material_source = self._material_source(info.notes2)
         return info
 
     def _get_entity_path(self, entity, entity_type: str) -> list[str]:
@@ -211,13 +217,66 @@ class Repository:
             'subspecies': 'subspecies_id',
             'variety': 'variety_id'
         }
-        if field := field_map.get(entity_type):
-            kwargs.update({field: entity_id, 'marker_id': marker_id})
-            association = MarkerAssociation(**kwargs)
-            self.session.add(association)
-            self.session.flush()
-            return association.id
-        raise ValueError(f"Unknown entity type: {entity_type}")
+        field = field_map.get(entity_type)
+        if not field:
+            raise ValueError(f"Unknown entity type: {entity_type}")
+
+        target = self.session.get(self.entity_classes[entity_type], entity_id)
+        if target is None:
+            raise UserOperationError("关联对象不存在，本次操作没有保存。")
+        if self.session.get(Marker, marker_id) is None:
+            raise UserOperationError("选择的物质不存在，本次操作没有保存。")
+        existing = self.get_marker_associations_by_entity(entity_type, entity_id)
+        if any(a.marker_id == marker_id for a in existing):
+            raise UserOperationError("该物质已经关联到此对象，本次没有重复新增。")
+
+        kwargs.update({field: entity_id, 'marker_id': marker_id})
+        association = MarkerAssociation(**kwargs)
+        self.session.add(association)
+        self.session.flush()
+        return association.id
+
+    def replace_marker_association(self, association_id: int, marker_id: int,
+                                   entity_type: str, entity_id: int,
+                                   **kwargs) -> int:
+        """Atomically replace an association when its marker/target changes."""
+        association = self.session.get(MarkerAssociation, association_id)
+        if association is None:
+            raise UserOperationError("原关联不存在，本次操作没有保存。")
+        field_map = {'crop': 'crop_id', 'subspecies': 'subspecies_id', 'variety': 'variety_id'}
+        field = field_map.get(entity_type)
+        if not field or self.session.get(self.entity_classes[entity_type], entity_id) is None:
+            raise UserOperationError("关联对象不存在，本次操作没有保存。")
+        if self.session.get(Marker, marker_id) is None:
+            raise UserOperationError("选择的物质不存在，本次操作没有保存。")
+        duplicate = self.get_marker_associations_by_entity(entity_type, entity_id)
+        if any(a.id != association_id and a.marker_id == marker_id for a in duplicate):
+            raise UserOperationError("该物质已经关联到此对象，原关联保持不变。")
+
+        association.marker_id = marker_id
+        association.crop_id = None
+        association.subspecies_id = None
+        association.variety_id = None
+        setattr(association, field, entity_id)
+        for key, value in kwargs.items():
+            if hasattr(association, key):
+                setattr(association, key, value)
+        self.session.flush()
+        return association.id
+
+    def create_marker_associations(self, marker_id: int,
+                                   targets: list[tuple[str, int]], **kwargs) -> list[int]:
+        """Create all selected associations in one transaction or none at all."""
+        seen = set()
+        for entity_type, entity_id in targets:
+            target = (entity_type, entity_id)
+            if target in seen:
+                raise UserOperationError("关联对象重复，本次操作没有保存。")
+            seen.add(target)
+            if any(a.marker_id == marker_id for a in self.get_marker_associations_by_entity(entity_type, entity_id)):
+                raise UserOperationError("所选对象中已有该物质关联，本次操作没有保存。")
+        return [self.create_marker_association(marker_id, entity_type, entity_id, **kwargs)
+                for entity_type, entity_id in targets]
 
     def update(self, entity_type: str, entity_id: int, data: dict) -> bool:
         if entity_class := self.entity_classes.get(entity_type):
@@ -343,6 +402,23 @@ class Repository:
             case _:
                 return []
 
+    def get_marker_summaries(self) -> list[dict]:
+        """One query for the material library; avoids a detail query per row."""
+        rows = (self.session.query(
+            Marker.id, Marker.name, Marker.name_en, Marker.structure_formula,
+            Marker.notes, Marker.notes2, func.count(MarkerAssociation.id).label("association_count"),
+        ).outerjoin(MarkerAssociation, MarkerAssociation.marker_id == Marker.id)
+         .group_by(Marker.id, Marker.name, Marker.name_en, Marker.structure_formula,
+                   Marker.notes, Marker.notes2)
+         .order_by(Marker.name, Marker.id).all())
+        return [{
+            "id": row.id, "name": row.name, "name_en": row.name_en,
+            "structure_formula": row.structure_formula, "notes": row.notes,
+            "notes2": row.notes2, "association_count": row.association_count,
+            "material_type": self._material_type(row.notes),
+            "material_source": self._material_source(row.notes2),
+        } for row in rows]
+
     def get_marker_associations_by_entity(
             self, entity_type: str, entity_id: int) -> list[MarkerAssociation]:
         field_map = {
@@ -375,34 +451,73 @@ class Repository:
             if var_ids else 0)
         return crop_count + sub_count + var_count
 
+    @staticmethod
+    def _material_type(notes: str | None) -> str:
+        """Normalise the user-maintained 备注1 material classification."""
+        return (notes or "").strip()
+
+    @staticmethod
+    def _material_source(notes2: str | None) -> str:
+        """Normalise 备注2 while allowing “文献报道：URL” details."""
+        value = (notes2 or "").strip()
+        if value.startswith("文献报道"):
+            return "文献报道"
+        if value.startswith("自行筛选"):
+            return "自行筛选"
+        return value
+
+    def get_marker_count_by_crop_and_type(self, crop_id: int, material_type: str) -> int:
+        """Count distinct materials linked at any level below a crop."""
+        sub_ids = [s.id for s in self.session.query(Subspecies.id).filter_by(crop_id=crop_id)]
+        var_ids = ([v.id for v in self.session.query(Variety.id)
+                    .filter(Variety.subspecies_id.in_(sub_ids))] if sub_ids else [])
+        query = self.session.query(Marker.id).join(
+            MarkerAssociation, MarkerAssociation.marker_id == Marker.id
+        ).filter(Marker.notes == material_type)
+        clauses = [MarkerAssociation.crop_id == crop_id]
+        if sub_ids:
+            clauses.append(MarkerAssociation.subspecies_id.in_(sub_ids))
+        if var_ids:
+            clauses.append(MarkerAssociation.variety_id.in_(var_ids))
+        return query.filter(or_(*clauses)).distinct().count()
+
     def get_stats(self) -> dict:
+        markers = self.session.query(Marker).all()
         total_associations = self.session.query(MarkerAssociation).count()
         markers_with_association = self.session.query(
             MarkerAssociation.marker_id).distinct().count()
-
+        type_counts = {
+            "标志物": sum(self._material_type(m.notes) == "标志物" for m in markers),
+            "特征物质": sum(self._material_type(m.notes) == "特征物质" for m in markers),
+            "未分类": sum(self._material_type(m.notes) not in ("标志物", "特征物质") for m in markers),
+        }
+        source_counts = {
+            source: {
+                material_type: sum(
+                    self._material_source(m.notes2) == source
+                    and self._material_type(m.notes) == material_type
+                    for m in markers
+                ) for material_type in ("标志物", "特征物质")
+            }
+            for source in ("自行筛选", "文献报道")
+        }
         return {
             'total': {
                 'crops': self.session.query(Crop).count(),
                 'subspecies': self.session.query(Subspecies).count(),
                 'varieties': self.session.query(Variety).count(),
-                'markers': self.session.query(Marker).count(),
-                'associations': total_associations
+                'markers': len(markers),
+                'associations': total_associations,
+                'material_types': type_counts,
             },
             'markers': {
-                'total_associations':
-                total_associations,
-                'markers_without_association':
-                self.session.query(Marker).count() - markers_with_association,
+                'total_associations': total_associations,
+                'markers_without_association': len(markers) - markers_with_association,
+                'material_sources': source_counts,
                 'associations_by_level': {
-                    'crop':
-                    self.session.query(MarkerAssociation).filter(
-                        MarkerAssociation.crop_id.isnot(None)).count(),
-                    'subspecies':
-                    self.session.query(MarkerAssociation).filter(
-                        MarkerAssociation.subspecies_id.isnot(None)).count(),
-                    'variety':
-                    self.session.query(MarkerAssociation).filter(
-                        MarkerAssociation.variety_id.isnot(None)).count()
+                    'crop': self.session.query(MarkerAssociation).filter(MarkerAssociation.crop_id.isnot(None)).count(),
+                    'subspecies': self.session.query(MarkerAssociation).filter(MarkerAssociation.subspecies_id.isnot(None)).count(),
+                    'variety': self.session.query(MarkerAssociation).filter(MarkerAssociation.variety_id.isnot(None)).count(),
                 }
             }
         }

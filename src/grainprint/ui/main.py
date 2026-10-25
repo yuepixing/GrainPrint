@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import flet as ft
 from pathlib import Path
+from grainprint.core.database import DatabaseInUseError
 from datetime import datetime
 
 from grainprint.services.excel import ExcelService
@@ -255,7 +256,7 @@ class GrainPrintApp:
                     ]),
                     ft.Row([
                         self.create_nav_tab("粮食管理", "crop", True),
-                        self.create_nav_tab("标志物库", "marker"),
+                        self.create_nav_tab("标志物及特征物质库", "marker"),
                         self.create_nav_tab("统计分析", "stats"),
                     ], spacing=30),
                     ft.Row([
@@ -406,7 +407,11 @@ class GrainPrintApp:
         )
         if not result:
             return
-        results = self.excel_service.import_data(result[0].path)
+        try:
+            results = self.excel_service.import_data(result[0].path)
+        except Exception as exc:
+            self.show_error(f"导入失败，数据库没有被修改：{exc}")
+            return
         total = sum(results.values())
         self._show_dialog(
             "导入成功",

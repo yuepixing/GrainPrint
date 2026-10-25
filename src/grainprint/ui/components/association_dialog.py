@@ -73,6 +73,7 @@ class AssociationDialog:
         self.entities: set[tuple[str, int]] = set()
         self.expanded: set[str] = set()
         self.marker_filter = ""
+        self.marker_type_filter: Optional[str] = None
 
         self.show_marker_section = True
         self.show_entity_section = True
@@ -189,11 +190,14 @@ class AssociationDialog:
         self._refresh_markers()
 
         body = ft.Column([
-            ft.TextField(
-                label="搜索", prefix_icon=ft.Icons.SEARCH, dense=True,
-                on_change=self._on_marker_search,
-                width=float("inf"),
-            ),
+            ft.Row([
+                ft.TextField(label="搜索", prefix_icon=ft.Icons.SEARCH, dense=True,
+                             on_change=self._on_marker_search, expand=True),
+                ft.Dropdown(label="物质类型", width=150, dense=True,
+                            options=[ft.DropdownOption(key="", text="全部")] + [
+                                ft.DropdownOption(key=x, text=x) for x in ("标志物", "特征物质")
+                            ], on_select=self._on_marker_type_filter),
+            ]),
             ft.Container(
                 content=self._marker_list,
                 border=bordered(1, ft.Colors.GREY_300),
@@ -227,10 +231,18 @@ class AssociationDialog:
         self._refresh_markers()
         self.page.update()
 
+    def _on_marker_type_filter(self, e):
+        self.marker_type_filter = e.control.value or None
+        self._refresh_markers()
+        self.page.update()
+
     def _refresh_markers(self):
         self._marker_list.controls.clear()
         kw = self.marker_filter
         for m in self._markers:
+            material_type = (getattr(m, "notes", None) or "").strip()
+            if self.marker_type_filter and material_type != self.marker_type_filter:
+                continue
             if kw and not self._marker_matches(m, kw):
                 continue
             self._marker_list.controls.append(self._marker_item(m))
@@ -243,6 +255,8 @@ class AssociationDialog:
             kw in m.name.lower()
             or (m.name_en and kw in m.name_en.lower())
             or (m.structure_formula and kw in m.structure_formula.lower())
+            or (getattr(m, "notes", None) and kw in m.notes.lower())
+            or (getattr(m, "notes2", None) and kw in m.notes2.lower())
         )
 
     def _marker_item(self, marker) -> ft.Container:
@@ -416,25 +430,26 @@ class AssociationDialog:
             return self._warn("请至少选择一个实体")
 
         info = self._collect_info()
-        if self.association_id is None:
-            self._create_many(info)
-        else:
-            self._update_one(info)
+        try:
+            if self.association_id is None:
+                self._create_many(info)
+            else:
+                self._update_one(info)
+        except Exception as exc:
+            # Do not close the dialog: nothing is partially saved and the user
+            # keeps all entered values for correction/retry.
+            return self._warn(f"保存失败，本次修改已撤销：{exc}")
 
         self._close()
         if self.on_done:
             self.on_done()
 
     def _create_many(self, info: dict):
-        for etype_str, eid in self.entities:
-            etype = EntityType(etype_str)
-            if self._already_linked(etype, eid, self.marker_id):
-                continue
-            MarkerService.create_association(MarkerAssociationCreate(
-                marker_id=self.marker_id,
-                entity_type=etype, entity_id=eid,
-                **info,
-            ))
+        MarkerService.create_associations(
+            self.marker_id,
+            [(EntityType(etype), eid) for etype, eid in self.entities],
+            info,
+        )
 
     def _update_one(self, info: dict):
         etype_str, eid = next(iter(self.entities))
@@ -444,14 +459,10 @@ class AssociationDialog:
             for a in MarkerService.get_associations_by_entity(etype, eid)
         )
         if unchanged:
-            MarkerService.update_association(
-                self.association_id, MarkerAssociationUpdate(**info))
+            MarkerService.update_association(self.association_id, MarkerAssociationUpdate(**info))
         else:
-            EntityService.delete(EntityType.ASSOCIATION, self.association_id)
-            MarkerService.create_association(MarkerAssociationCreate(
-                marker_id=self.marker_id,
-                entity_type=etype, entity_id=eid,
-                **info,
+            MarkerService.replace_association(self.association_id, MarkerAssociationCreate(
+                marker_id=self.marker_id, entity_type=etype, entity_id=eid, **info,
             ))
 
     @staticmethod
