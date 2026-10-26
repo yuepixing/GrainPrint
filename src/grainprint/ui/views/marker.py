@@ -33,35 +33,71 @@ class MarkerView(ft.Column):
         self._summaries: list[dict[str, Any]] = []
 
         self._grid_inner = ft.Row(wrap=True, spacing=16, run_spacing=16, width=float("inf"))
-        self.grid = ft.Column(controls=[self._grid_inner], scroll=ft.ScrollMode.AUTO, expand=True, width=float("inf"))
-        self.list = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=4, width=float("inf"))
-        self.content = ft.Container(content=self.list, padding=pad_only(left=20, right=20, bottom=20), expand=True)
+        self.grid = ft.Column(controls=[self._grid_inner], scroll=ft.ScrollMode.AUTO, expand=True, width=float("inf"), visible=False)
+        self.list = ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, spacing=4, width=float("inf"), visible=True)
         self.grid_btn = ft.IconButton(icon=ft.Icons.GRID_VIEW, tooltip="网格视图", on_click=lambda e: self._switch_view("grid"))
         self.list_btn = ft.IconButton(icon=ft.Icons.VIEW_LIST, tooltip="列表视图", on_click=lambda e: self._switch_view("list"))
         self._sync_toggle_style()
+        self.view_toggle = ft.Container(
+            ft.Row([self.grid_btn, self.list_btn], spacing=2),
+            bgcolor=ft.Colors.GREY_100, border_radius=8, padding=2, height=60,
+        )
         self.type_filter = ft.Dropdown(
             label="备注1：物质类型", width=180, dense=True,
-            options=[ft.DropdownOption(key="", text="全部类型")] + [ft.DropdownOption(key=x, text=x) for x in MATERIAL_TYPES],
+            options=[ft.DropdownOption(key="", text="全部类型")],
             on_select=self._on_type_filter,
         )
         self.source_filter = ft.Dropdown(
             label="备注2：来源", width=180, dense=True,
-            options=[ft.DropdownOption(key="", text="全部来源")] + [ft.DropdownOption(key=x, text=x) for x in MATERIAL_SOURCES],
+            options=[ft.DropdownOption(key="", text="全部来源")],
             on_select=self._on_source_filter,
         )
         self.stats_row = ft.Row(spacing=12, wrap=True)
+        self.new_btn = ft.Container(
+            ft.FilledButton(content="新建物质", icon=ft.Icons.ADD, height=40, on_click=lambda e: self._create_marker()),
+            alignment=ft.Alignment.CENTER,
+        )
         self.controls = [
-            ft.Container(ft.Text("标志物及特征物质库", size=24, weight=ft.FontWeight.BOLD), padding=pad_only(left=20, right=20, top=16)),
+            ft.Container(
+                ft.Row([
+                    ft.Text("标志物及特征物质库", size=24, weight=ft.FontWeight.BOLD),
+                    ft.Container(expand=True),
+                    self.new_btn,
+                ]),
+                padding=pad_only(left=20, right=20, top=16),
+            ),
             ft.Container(self.stats_row, padding=pad_only(left=20, right=20, bottom=4)),
-            ft.Container(ft.Row([self.type_filter, self.source_filter], spacing=12), padding=pad_only(left=20, right=20, bottom=4)),
-            self.content,
+            ft.Container(
+                ft.Row([
+                    self.type_filter,
+                    self.source_filter,
+                    ft.Container(expand=True),
+                    self.view_toggle,
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                padding=pad_only(left=20, right=20, bottom=4),
+            ),
+            self.list,
+            self.grid,
         ]
         EventBus().subscribe(EventType.NAVIGATE_TO_MARKER, lambda e: self.select_marker(e.data['marker_id']))
 
     def refresh(self):
         self._summaries = EntityService.get_marker_summaries()
+        self._refresh_filter_options()
         self._load_stats()
         self._render_all()
+
+    def _refresh_filter_options(self):
+        notes1 = sorted({m.get('notes') or "" for m in self._summaries if m.get('notes')})
+        notes2 = sorted({m.get('notes2') or "" for m in self._summaries if m.get('notes2')})
+        self.type_filter.options = [ft.DropdownOption(key="", text="全部类型")] + [
+            ft.DropdownOption(key=x, text=x) for x in notes1
+        ]
+        self.source_filter.options = [ft.DropdownOption(key="", text="全部来源")] + [
+            ft.DropdownOption(key=x, text=x) for x in notes2
+        ]
+        self.type_filter.value = self._material_filter if self._material_filter in notes1 else ""
+        self.source_filter.value = self._source_filter if self._source_filter in notes2 else ""
 
     def select_marker(self, marker_id: int):
         self.selected_id = marker_id
@@ -98,7 +134,8 @@ class MarkerView(ft.Column):
         if mode == self.view_mode:
             return
         self.view_mode = mode
-        self.content.content = self.grid if mode == "grid" else self.list
+        self.grid.visible = mode == "grid"
+        self.list.visible = mode != "grid"
         self._sync_toggle_style()
         self._render_all()
 
@@ -113,18 +150,17 @@ class MarkerView(ft.Column):
         types = stats['total']['material_types']
         unlinked = stats['markers']['markers_without_association']
         linked = total - unlinked
-        toggle = ft.Container(ft.Row([self.grid_btn, self.list_btn], spacing=2), bgcolor=ft.Colors.GREY_100, border_radius=8, padding=2, height=60)
-        new_btn = ft.Container(ft.FilledButton(content="新建物质", icon=ft.Icons.ADD, width=float("inf"), height=40, on_click=lambda e: self._create_marker()), expand=True, height=60, alignment=ft.Alignment.CENTER)
         cards = [
-            StatCard("物质总数", total, ft.Icons.CATEGORY, ft.Colors.GREEN_700),
-            StatCard("标志物数", types['标志物'], ft.Icons.SCIENCE, ft.Colors.BLUE_700),
-            StatCard("特征物质数", types['特征物质'], ft.Icons.BIOTECH, ft.Colors.PURPLE_700),
-            StatCard("已关联", linked, ft.Icons.LINK, ft.Colors.TEAL_700),
-            StatCard("未关联", unlinked, ft.Icons.LINK_OFF, ft.Colors.ORANGE_700),
+            StatCard("物质总数", total, ft.Icons.CATEGORY, ft.Colors.GREEN_700, width=170),
+            StatCard("标志物数", types['标志物'], ft.Icons.SCIENCE, ft.Colors.BLUE_700, width=170),
+            StatCard("特征物质数", types['特征物质'], ft.Icons.BIOTECH, ft.Colors.PURPLE_700, width=170),
+            StatCard("未分类", types['未分类'], ft.Icons.HELP_OUTLINE, ft.Colors.AMBER_700, width=170),
+            StatCard("已关联", linked, ft.Icons.LINK, ft.Colors.TEAL_700, width=170),
+            StatCard("未关联", unlinked, ft.Icons.LINK_OFF, ft.Colors.ORANGE_700, width=170),
         ]
-        for card, state in zip((cards[0], cards[3], cards[4]), ("all", "linked", "unlinked")):
+        for card, state in zip((cards[0], cards[3], cards[4], cards[5]), ("all", "unclassified", "linked", "unlinked")):
             card.ink, card.on_click = True, (lambda e, s=state: self.filter_by_association(s))
-        self.stats_row.controls = [*cards, toggle, new_btn]
+        self.stats_row.controls = cards
 
     def _visible_summaries(self) -> list[dict[str, Any]]:
         ret = self._summaries
@@ -132,10 +168,12 @@ class MarkerView(ft.Column):
             ret = [m for m in ret if m['association_count']]
         elif self._association_filter == "unlinked":
             ret = [m for m in ret if not m['association_count']]
+        elif self._association_filter == "unclassified":
+            ret = [m for m in ret if m['material_type'] not in ("标志物", "特征物质")]
         if self._material_filter:
-            ret = [m for m in ret if m['material_type'] == self._material_filter]
+            ret = [m for m in ret if m.get('notes') == self._material_filter]
         if self._source_filter:
-            ret = [m for m in ret if m['material_source'] == self._source_filter]
+            ret = [m for m in ret if m.get('notes2') == self._source_filter]
         return ret
 
     def _render_all(self):
@@ -182,7 +220,7 @@ class MarkerView(ft.Column):
             ft.Text(str(seq), size=13, color=ft.Colors.GREY_600, expand=1),
             ft.Text(marker['name'], size=14, weight=ft.FontWeight.W_500, expand=2),
             ft.Text(marker['name_en'] or "—", size=13, color=ft.Colors.GREY_700, expand=2),
-            ft.Text(marker['structure_formula'] or "—", size=13, style=ft.TextStyle(font_family="Consolas"), expand=3),
+            ft.Text(marker['structure_formula'] or "—", size=13, expand=3),
             ft.Text(marker['notes'] or "未分类", size=12, expand=2, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
             ft.Text(marker['notes2'] or "—", size=12, expand=2, max_lines=2, overflow=ft.TextOverflow.ELLIPSIS),
             ft.Text(str(marker['association_count']), size=13, expand=1),

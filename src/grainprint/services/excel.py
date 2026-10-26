@@ -160,6 +160,15 @@ class ExcelService:
             existing = self._find(repo, 'marker', name=name)
             if existing:
                 id_map['markers'][old_id] = existing.id
+                # When a template is re-imported, fill missing classification/source
+                # without wiping values the user has since corrected.
+                updates = {}
+                if notes:
+                    updates['notes'] = notes
+                if notes2:
+                    updates['notes2'] = notes2
+                if updates:
+                    repo.update('marker', existing.id, updates)
             else:
                 new_id = repo.create('marker', name=name, name_en=name_en,
                                      structure_formula=structure_formula, notes=notes, notes2=notes2)

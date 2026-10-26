@@ -53,8 +53,7 @@ class MarkerCard(ft.Container):
         formula_display = ft.Container(
             content=ft.Text(formula or "—", size=16,
                             color=ft.Colors.GREY_800,
-                            text_align=ft.TextAlign.CENTER,
-                            style=ft.TextStyle(font_family="Consolas")),
+                            text_align=ft.TextAlign.CENTER),
             bgcolor=ft.Colors.GREY_100, padding=10, border_radius=4,
             alignment=ft.Alignment.CENTER, height=60,
         )
