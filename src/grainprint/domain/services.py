@@ -91,6 +91,21 @@ class EntityService:
             return Repository(session).get_marker_summaries()
 
     @staticmethod
+    def get_hierarchy() -> List[Dict[str, Any]]:
+        with get_session() as session:
+            return Repository(session).get_hierarchy()
+
+    @staticmethod
+    def get_association_editor_data() -> Dict[str, Any]:
+        with get_session() as session:
+            return Repository(session).get_association_editor_data()
+
+    @staticmethod
+    def get_entity_location(entity_type: EntityType, entity_id: int) -> tuple[int | None, int | None]:
+        with get_session() as session:
+            return Repository(session).get_entity_location(entity_type.value, entity_id)
+
+    @staticmethod
     def reorder(entity_type: EntityType, ordered_ids: List[int],
                 parent_id: Optional[int] = None) -> bool:
         with get_session() as session:

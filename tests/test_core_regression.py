@@ -107,3 +107,47 @@ def test_legacy_association_notes_are_migrated_to_material():
         material = session.get(repo.entity_classes['marker'], marker)
         assert material.notes == '标志物'
         assert material.notes2 == '自行筛选'
+
+
+def test_hierarchy_and_editor_data_are_complete():
+    reset_db()
+    with get_session() as session:
+        repo = Repository(session)
+        crop, subspecies, variety, marker, feature = setup_data(repo)
+        hierarchy = repo.get_hierarchy()
+        assert hierarchy == [{
+            'id': crop, 'name': '稻谷', 'type': 'crop',
+            'children': [{
+                'id': subspecies, 'name': '粳稻', 'type': 'subspecies',
+                'children': [{'id': variety, 'name': '龙粳31', 'type': 'variety', 'children': []}],
+            }],
+        }]
+        editor_data = repo.get_association_editor_data()
+        assert {item['id'] for item in editor_data['markers']} == {marker, feature}
+        assert editor_data['hierarchy'] == hierarchy
+        assert repo.get_entity_location('variety', variety) == (crop, subspecies)
+        assert repo.get_entity_location('subspecies', subspecies) == (crop, subspecies)
+        assert repo.get_entity_location('crop', crop) == (crop, None)
+
+
+def test_hierarchy_is_complete_for_large_data_set():
+    reset_db()
+    with get_session() as session:
+        repo = Repository(session)
+        for crop_number in range(5):
+            crop = repo.create('crop', name=f'粮食{crop_number}')
+            for subspecies_number in range(4):
+                subspecies = repo.create(
+                    'subspecies', crop_id=crop, name=f'品类{crop_number}-{subspecies_number}'
+                )
+                for variety_number in range(3):
+                    repo.create(
+                        'variety', subspecies_id=subspecies,
+                        name=f'品种{crop_number}-{subspecies_number}-{variety_number}',
+                    )
+
+    with get_session() as session:
+        hierarchy = Repository(session).get_hierarchy()
+    assert len(hierarchy) == 5
+    assert sum(len(crop['children']) for crop in hierarchy) == 20
+    assert sum(len(sub['children']) for crop in hierarchy for sub in crop['children']) == 60

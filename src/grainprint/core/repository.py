@@ -51,6 +51,60 @@ class Repository:
 
         return results
 
+    def get_hierarchy(self) -> list[dict]:
+        """Load the full grain hierarchy in three queries, never one per node."""
+        crops = self.session.query(Crop).order_by(Crop.sort_order, Crop.id).all()
+        subspecies = self.session.query(Subspecies).order_by(
+            Subspecies.sort_order, Subspecies.id).all()
+        varieties = self.session.query(Variety).order_by(Variety.name, Variety.id).all()
+
+        varieties_by_sub: dict[int, list[dict]] = {}
+        for variety in varieties:
+            varieties_by_sub.setdefault(variety.subspecies_id, []).append({
+                "id": variety.id, "name": variety.name, "type": "variety", "children": [],
+            })
+        subs_by_crop: dict[int, list[dict]] = {}
+        for subspecies_item in subspecies:
+            subs_by_crop.setdefault(subspecies_item.crop_id, []).append({
+                "id": subspecies_item.id,
+                "name": subspecies_item.name,
+                "type": "subspecies",
+                "children": varieties_by_sub.get(subspecies_item.id, []),
+            })
+        return [{
+            "id": crop.id,
+            "name": crop.name,
+            "type": "crop",
+            "children": subs_by_crop.get(crop.id, []),
+        } for crop in crops]
+
+    def get_association_editor_data(self) -> dict:
+        """Fetch everything the association editor needs without N+1 queries."""
+        markers = self.session.query(Marker).order_by(Marker.name, Marker.id).all()
+        return {
+            "markers": [{
+                "id": marker.id,
+                "name": marker.name,
+                "name_en": marker.name_en,
+                "structure_formula": marker.structure_formula,
+                "notes": marker.notes,
+                "notes2": marker.notes2,
+            } for marker in markers],
+            "hierarchy": self.get_hierarchy(),
+        }
+
+    def get_entity_location(self, entity_type: str, entity_id: int) -> tuple[int | None, int | None]:
+        """Return parent IDs needed to expand a selected hierarchy node."""
+        if entity_type == "variety":
+            row = self.session.query(Variety.subspecies_id, Subspecies.crop_id).join(
+                Subspecies, Variety.subspecies_id == Subspecies.id
+            ).filter(Variety.id == entity_id).first()
+            return (row[1], row[0]) if row else (None, None)
+        if entity_type == "subspecies":
+            row = self.session.query(Subspecies.crop_id).filter(Subspecies.id == entity_id).first()
+            return (row[0], entity_id) if row else (None, None)
+        return (entity_id if entity_type == "crop" else None, None)
+
     def get_detail(self, entity_type: str, entity_id: int) -> EntityDetail:
         entity = self.session.get(self.entity_classes[entity_type], entity_id)
 

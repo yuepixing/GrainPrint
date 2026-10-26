@@ -107,27 +107,13 @@ class AssociationDialog:
         self.page.show_dialog(self._dialog)
 
     def _preload(self):
-        self._markers = EntityService.get_children(EntityType.MARKER)
-        with get_session() as session:
-            repo = Repository(session)
-            self._tree = [
-                {
-                    'type': 'crop', 'id': c.id, 'name': c.name,
-                    'children': [
-                        {
-                            'type': 'subspecies', 'id': s.id, 'name': s.name,
-                            'children': [
-                                {'type': 'variety', 'id': v.id, 'name': v.name, 'children': []}
-                                for v in repo.get_children('variety', s.id)
-                            ],
-                        }
-                        for s in repo.get_children('subspecies', c.id)
-                    ],
-                }
-                for c in repo.get_children('crop')
-            ]
-        for c in self._tree:
-            self.expanded.add(f"crop_{c['id']}")
+        # One read replaces the old repeated crop -> subspecies -> variety
+        # lookup pattern, so opening the association editor stays responsive.
+        data = EntityService.get_association_editor_data()
+        self._markers = data["markers"]
+        self._tree = data["hierarchy"]
+        for crop in self._tree:
+            self.expanded.add(f"crop_{crop['id']}")
 
     def _build_body(self) -> ft.Container:
         rows: list[ft.Control] = []
@@ -217,8 +203,8 @@ class AssociationDialog:
     def _marker_subtitle(self) -> str:
         if self.marker_id is None:
             return "未选择"
-        m = next((x for x in self._markers if x.id == self.marker_id), None)
-        return f"当前: {m.name}" if m else "未选择"
+        m = next((x for x in self._markers if x['id'] == self.marker_id), None)
+        return f"当前: {m['name']}" if m else "未选择"
 
     def _toggle_marker_section(self):
         self.marker_section_open = not self.marker_section_open
@@ -240,7 +226,7 @@ class AssociationDialog:
         self._marker_list.controls.clear()
         kw = self.marker_filter
         for m in self._markers:
-            material_type = (getattr(m, "notes", None) or "").strip()
+            material_type = (m['notes'] or "").strip()
             if self.marker_type_filter and material_type != self.marker_type_filter:
                 continue
             if kw and not self._marker_matches(m, kw):
@@ -252,20 +238,20 @@ class AssociationDialog:
     @staticmethod
     def _marker_matches(m, kw: str) -> bool:
         return (
-            kw in m.name.lower()
-            or (m.name_en and kw in m.name_en.lower())
-            or (m.structure_formula and kw in m.structure_formula.lower())
-            or (getattr(m, "notes", None) and kw in m.notes.lower())
-            or (getattr(m, "notes2", None) and kw in m.notes2.lower())
+            kw in m['name'].lower()
+            or (m['name_en'] and kw in m['name_en'].lower())
+            or (m['structure_formula'] and kw in m['structure_formula'].lower())
+            or (m['notes'] and kw in m['notes'].lower())
+            or (m['notes2'] and kw in m['notes2'].lower())
         )
 
     def _marker_item(self, marker) -> ft.Container:
-        selected = self.marker_id == marker.id
+        selected = self.marker_id == marker['id']
         return ft.Container(
             content=ft.Row([
-                ft.Text(marker.name, weight=ft.FontWeight.W_500, expand=2),
+                ft.Text(marker['name'], weight=ft.FontWeight.W_500, expand=2),
                 ft.Text(
-                    marker.structure_formula or "—",
+                    marker['structure_formula'] or "—",
                     size=12, color=ft.Colors.GREY_600,
                     style=ft.TextStyle(font_family="Consolas"),
                     expand=3,
@@ -273,9 +259,9 @@ class AssociationDialog:
             ]),
             padding=8,
             bgcolor=ft.Colors.BLUE_50 if selected else None,
-            on_click=lambda e, mid=marker.id: self._select_marker(mid),
+            on_click=lambda e, mid=marker['id']: self._select_marker(mid),
             ink=True,
-            data=marker.id,
+            data=marker['id'],
         )
 
     def _select_marker(self, marker_id: int):

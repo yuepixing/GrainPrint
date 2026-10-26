@@ -73,6 +73,7 @@ class CropView(ft.Row):
         self.selected_id: Optional[int] = None
         self.selected_type: Optional[EntityType] = None
         self.expanded: Set[str] = set()
+        self._hierarchy: list[dict] = []
 
         self.tree = ft.ReorderableListView(
             controls=[],
@@ -162,25 +163,17 @@ class CropView(ft.Row):
         self._load_tree()
 
     def _ensure_expanded(self, entity_type: str, entity_id: int):
-        if entity_type == 'variety':
-            varieties = EntityService.get_children(EntityType.VARIETY)
-            var = next((v for v in varieties if v.id == entity_id), None)
-            if not var:
-                return
-            self.expanded.add(f"subspecies_{var.subspecies_id}")
-            subs = EntityService.get_children(EntityType.SUBSPECIES)
-            sub = next((s for s in subs if s.id == var.subspecies_id), None)
-            if sub:
-                self.expanded.add(f"crop_{sub.crop_id}")
-        elif entity_type == 'subspecies':
-            subs = EntityService.get_children(EntityType.SUBSPECIES)
-            sub = next((s for s in subs if s.id == entity_id), None)
-            if sub:
-                self.expanded.add(f"crop_{sub.crop_id}")
+        crop_id, subspecies_id = EntityService.get_entity_location(
+            EntityType(entity_type), entity_id)
+        if crop_id:
+            self.expanded.add(f"crop_{crop_id}")
+        if subspecies_id:
+            self.expanded.add(f"subspecies_{subspecies_id}")
 
     def _load_tree(self):
+        self._hierarchy = EntityService.get_hierarchy()
         self.tree.controls.clear()
-        for crop in EntityService.get_children(EntityType.CROP):
+        for crop in self._hierarchy:
             self._append_crop(crop)
         self._update_page()
 
@@ -209,47 +202,42 @@ class CropView(ft.Row):
             )
         self._update_page()
 
-    def _append_crop(self, crop):
-        key = f"crop_{crop.id}"
+    def _append_crop(self, crop: dict):
+        crop_id = crop['id']
+        key = f"crop_{crop_id}"
         expanded = key in self.expanded
-        subs = EntityService.get_children(EntityType.SUBSPECIES, crop.id)
-
+        subs = crop['children']
         self.tree.controls.append(TreeNode(
-            entity_id=crop.id, entity_type=EntityType.CROP,
-            name=crop.name, count=len(subs), is_expanded=expanded,
-            is_selected=(self.selected_id == crop.id
-                         and self.selected_type == EntityType.CROP),
+            entity_id=crop_id, entity_type=EntityType.CROP,
+            name=crop['name'], count=len(subs), is_expanded=expanded,
+            is_selected=(self.selected_id == crop_id and self.selected_type == EntityType.CROP),
             on_click=self._select_from_tree, on_toggle=self._toggle_expand,
             trailing=self._drag_handle(),
         ))
-        self.tree.controls[-1].data = ('crop', crop.id, None)
-
+        self.tree.controls[-1].data = ('crop', crop_id, None)
         if expanded:
             for sub in subs:
-                self._append_sub(sub)
+                self._append_sub(sub, crop_id)
 
-    def _append_sub(self, sub):
-        key = f"subspecies_{sub.id}"
+    def _append_sub(self, sub: dict, crop_id: int):
+        sub_id = sub['id']
+        key = f"subspecies_{sub_id}"
         expanded = key in self.expanded
-        varieties = EntityService.get_children(EntityType.VARIETY, sub.id)
-
+        varieties = sub['children']
         self.tree.controls.append(TreeNode(
-            entity_id=sub.id, entity_type=EntityType.SUBSPECIES,
-            name=sub.name, count=len(varieties), level=1, is_expanded=expanded,
-            is_selected=(self.selected_id == sub.id
-                         and self.selected_type == EntityType.SUBSPECIES),
+            entity_id=sub_id, entity_type=EntityType.SUBSPECIES,
+            name=sub['name'], count=len(varieties), level=1, is_expanded=expanded,
+            is_selected=(self.selected_id == sub_id and self.selected_type == EntityType.SUBSPECIES),
             on_click=self._select_from_tree, on_toggle=self._toggle_expand,
             trailing=self._drag_handle(),
         ))
-        self.tree.controls[-1].data = ('subspecies', sub.id, sub.crop_id)
-
+        self.tree.controls[-1].data = ('subspecies', sub_id, crop_id)
         if expanded:
-            for var in varieties:
+            for variety in varieties:
                 self.tree.controls.append(TreeNode(
-                    entity_id=var.id, entity_type=EntityType.VARIETY,
-                    name=var.name, level=2,
-                    is_selected=(self.selected_id == var.id
-                                 and self.selected_type == EntityType.VARIETY),
+                    entity_id=variety['id'], entity_type=EntityType.VARIETY,
+                    name=variety['name'], level=2,
+                    is_selected=(self.selected_id == variety['id'] and self.selected_type == EntityType.VARIETY),
                     on_click=self._select_from_tree,
                 ))
 
