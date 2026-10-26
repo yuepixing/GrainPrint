@@ -75,6 +75,10 @@ class Marker(Base):
     name: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     name_en: Mapped[str | None] = mapped_column(String(200))
     structure_formula: Mapped[str | None] = mapped_column(String(200))
+    # These are material-level fields.  An association has its own notes,
+    # but a material's type/source must not depend on which crop it is linked to.
+    notes: Mapped[str | None] = mapped_column(Text)
+    notes2: Mapped[str | None] = mapped_column(Text)
 
     associations: Mapped[list["MarkerAssociation"]] = relationship(
         back_populates="marker",

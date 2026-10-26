@@ -60,6 +60,8 @@ class VarietyUpdate(BaseModel):
 
 class MarkerCreate(BaseEntity):
     structure_formula: Optional[str] = Field(None, max_length=200, description="结构式")
+    notes: Optional[str] = Field(None, description="备注1（物质类型：标志物 / 特征物质）")
+    notes2: Optional[str] = Field(None, description="备注2（自行筛选 / 文献报道：网址）")
 
 class MarkerUpdate(BaseModel):
     name: Optional[str] = Field(None,
@@ -70,6 +72,8 @@ class MarkerUpdate(BaseModel):
     structure_formula: Optional[str] = Field(None,
                                              max_length=200,
                                              description="结构式")
+    notes: Optional[str] = Field(None, description="备注1（物质类型：标志物 / 特征物质）")
+    notes2: Optional[str] = Field(None, description="备注2（自行筛选 / 文献报道：网址）")
 
 
 class MarkerAssociationCreate(BaseModel):

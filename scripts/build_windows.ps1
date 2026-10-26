@@ -24,7 +24,7 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
 & .venv/Scripts/flet.exe pack -y src/main.py `
   -n GrainPrint `
   --product-name GrainPrint `
-  --product-version 0.2.0 `
+  --product-version 0.6.0 `
   --bundle-id cn.digitalsalt.grainprint `
   --add-data "src/assets;assets" `
   --add-data "src/grainprint/data;grainprint/data" `

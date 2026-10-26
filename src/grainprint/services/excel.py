@@ -47,19 +47,18 @@ class ExcelService:
 
     def _export_markers(self, wb, repo):
         ws = wb.create_sheet('标志物')
-        ws.append(['ID', '名称', '英文名', '结构式'])
+        ws.append(['ID', '名称', '英文名', '结构式', '备注1（物质类型）', '备注2（来源）'])
         for m in repo.get_children('marker'):
-            ws.append([m.id, m.name, m.name_en, m.structure_formula])
+            ws.append([m.id, m.name, m.name_en, m.structure_formula, m.notes, m.notes2])
 
     def _export_associations(self, wb, repo):
         ws = wb.create_sheet('标志物关联')
         ws.append(['ID', '标志物ID', '粮食ID', '品类ID', '品种ID',
                    '来源', '筛选方法', '代谢途径', '文献来源', '备注1', '备注2'])
-        with get_session() as session:
-            for a in session.query(MarkerAssociation).all():
-                ws.append([a.id, a.marker_id, a.crop_id, a.subspecies_id, a.variety_id,
-                           a.source, a.screening_method, a.metabolic_pathway,
-                           a.literature_source, a.notes, a.notes2])
+        for a in repo.session.query(MarkerAssociation).all():
+            ws.append([a.id, a.marker_id, a.crop_id, a.subspecies_id, a.variety_id,
+                       a.source, a.screening_method, a.metabolic_pathway,
+                       a.literature_source, a.notes, a.notes2])
 
     # ========== 导入 ==========
 
@@ -154,16 +153,25 @@ class ExcelService:
     def _import_markers(self, ws, repo, id_map):
         count = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
-            old_id, name, name_en, structure_formula = (row + (None,) * 4)[:4]
+            old_id, name, name_en, structure_formula, notes, notes2 = (row + (None,) * 6)[:6]
             if not name:
                 continue
 
             existing = self._find(repo, 'marker', name=name)
             if existing:
                 id_map['markers'][old_id] = existing.id
+                # When a template is re-imported, fill missing classification/source
+                # without wiping values the user has since corrected.
+                updates = {}
+                if notes:
+                    updates['notes'] = notes
+                if notes2:
+                    updates['notes2'] = notes2
+                if updates:
+                    repo.update('marker', existing.id, updates)
             else:
                 new_id = repo.create('marker', name=name, name_en=name_en,
-                                     structure_formula=structure_formula)
+                                     structure_formula=structure_formula, notes=notes, notes2=notes2)
                 id_map['markers'][old_id] = new_id
                 count += 1
         return count

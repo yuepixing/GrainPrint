@@ -135,9 +135,19 @@ class FormDialog(BaseDialog):
                 self.page.update()
                 return
 
-        model_instance = self.model_class(**data)
+        try:
+            model_instance = self.model_class(**data)
+            self.on_submit(model_instance)
+        except Exception as exc:
+            # Preserve the form and make a failed database write explicit.
+            for field in self.fields.values():
+                field.error_text = None
+            first_field = next(iter(self.fields.values()), None)
+            if first_field:
+                first_field.error_text = f"未保存：{exc}"
+            self.page.update()
+            return
         self.close()
-        self.on_submit(model_instance)
 
 
 class MessageDialog(BaseDialog):

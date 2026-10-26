@@ -24,6 +24,8 @@ class MarkerInfo(BaseModel):
     literature_source: str | None = None
     notes: str | None = None
     notes2: str | None = None
+    material_type: str | None = None
+    material_source: str | None = None
 
 
 class EntityDetail(BaseModel):
